@@ -19,7 +19,9 @@ Build an accessible, mobile-friendly volunteer reporting portal for Play & Learn
 - `node --check app.js` and HTML ID check.
 - Before release, test: first-admin bootstrap, invite email and accept flow, password reset, cohort assignment, report creation/read authorization, revoked access, analytics time filters, responsive navigation, and browser errors.
 - Run a volunteer-vs-super-admin access-control test with real test accounts. Keep test data synthetic and remove it before introducing real data.
-- Test deployment in a separate `pal-evaluation` Vercel project; do not modify `pal-tech`.
+- Production deployment target: `pal-evaluation` Vercel project at `https://pal-evaluation.vercel.app/` (Vercel project ID `prj_gEtujlrke91HBDNgMcmEUbg3VomC`).
+- Commit and push all source changes to `jadeleke/pal-evaluation` branch `main` first, then deploy and verify the same commit on the `pal-evaluation` Vercel project. Do not deploy the `pal-evaluation-gh` project or modify `pal-tech`.
+- Supabase Auth Site URL, redirect allowlist, and invitation redirects must use `https://pal-evaluation.vercel.app/`. Keep Supabase dashboard configuration in sync.
 
 ## Scope boundaries
 Do not claim GitHub or Vercel deployment succeeded without an actual remote URL and confirmed deployment state. No credentials in repo. No children-identifying records. Avoid presenting simulated analytics as genuine outcomes.
