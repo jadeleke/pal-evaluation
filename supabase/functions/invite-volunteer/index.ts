@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
         .select("id").eq("id", cohortId).maybeSingle();
       if (!cohort) return respond({ error: "Invalid cohort" }, 400);
     }
-    const site = Deno.env.get("PAL_SITE_URL");
+    const site = "https://pal-evaluation-gh.vercel.app/";
     const options: { data: { name: string }; redirectTo?: string } = {
       data: { name: fullName },
     };
