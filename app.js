@@ -11,6 +11,30 @@ const progressText={on_track:'On track',needs_support:'Needs support',not_assess
 const statusClass=s=>s==='completed'?'completed':s==='partial'?'partial':'cancelled';
 const emoji=p=>p==='PAL Tech'?'💻':p==='Girl Empowerment'?'🌸':'📚';
 const slug=p=>p==='PAL Tech'?'tech':p==='Girl Empowerment'?'girls':'library';
+function accountInitials(name,email){
+  const displayName=String(name||'').trim();
+  const emailPrefix=String(email||'').split('@')[0]||'';
+  const source=displayName||emailPrefix.replace(/[._-]+/g,' ');
+  const words=source.split(/\s+/).map(x=>x.replace(/[^\p{L}\p{N}]/gu,'')).filter(Boolean);
+  if(!words.length)return 'P';
+  return words.length>1
+    ? (words[0][0]+words[words.length-1][0]).toLocaleUpperCase().slice(0,2)
+    : words[0].slice(0,2).toLocaleUpperCase();
+}
+function renderProfileShortcut(){
+  if(!user||!profile)return;
+  const displayName=profile.full_name?.trim()||user.user_metadata?.name?.trim()||profile.email||user.email||'PAL team member';
+  const initials=accountInitials(displayName, user.email||profile.email);
+  const role=profile.role==='super_admin'?'Super administrator':profile.role==='programme_admin'?'Programme administrator':'Volunteer';
+  $('signed-in-name').textContent=displayName;
+  $('signed-in-role').textContent=role;
+  $('sidebar-avatar').textContent=initials;
+  $('topbar-account-button').textContent=initials;
+  for(const id of ['sidebar-account-button','topbar-account-button']){
+    $(id).setAttribute('aria-label','Account settings for '+displayName+' ('+role+')');
+    $(id).title='Account settings · '+displayName;
+  }
+}
 let user=null, profile=null, programmes=[], cohorts=[], reports=[], people=[],memberships=[];
 let activePage='dashboard', loading=false, refreshQueued=false;
 const linkSetupMode = new URLSearchParams(location.search).get('setup');
@@ -40,8 +64,7 @@ async function loadState(){
     const admin=profile.role==='super_admin';
     document.querySelectorAll('[data-admin]').forEach(e=>e.hidden=!admin);
     $('add-cohort-button').hidden=!admin;
-    $('signed-in-name').textContent=profile.full_name||profile.email;
-    $('signed-in-role').textContent=admin?'Super administrator':profile.role==='programme_admin'?'Programme administrator':'Volunteer';
+    renderProfileShortcut();
     $('today-text').textContent=new Intl.DateTimeFormat('en-GB',{dateStyle:'medium'}).format(new Date());
     let queries=[client.from('programmes').select('id,name,active').order('name'),client.from('cohorts').select('id,name,status,programme_id,programmes(name)').order('name'),client.from('session_reports').select('id,cohort_id,reporter_id,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators,cohorts(name,programmes(name))').order('session_date',{ascending:false}).limit(1000)];
     if(admin)queries.push(client.from('profiles').select('id,email,full_name,role,active').order('created_at',{ascending:false}),client.from('cohort_members').select('cohort_id,user_id'));
