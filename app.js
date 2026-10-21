@@ -13,6 +13,16 @@ const emoji=p=>p==='PAL Tech'?'💻':p==='Girl Empowerment'?'🌸':'📚';
 const slug=p=>p==='PAL Tech'?'tech':p==='Girl Empowerment'?'girls':'library';
 let user=null, profile=null, programmes=[], cohorts=[], reports=[], people=[],memberships=[];
 let activePage='dashboard', loading=false;
+const linkSetupMode = new URLSearchParams(location.search).get('setup');
+const authFragmentType = new URLSearchParams(location.hash.slice(1)).get('type');
+let passwordSetupPending = ['invite','recovery'].includes(linkSetupMode) || ['invite','recovery'].includes(authFragmentType);
+function showPasswordSetup(){
+  $('app').hidden=true;
+  $('auth-page').hidden=true;
+  $('password-page').hidden=false;
+  $('password-title').textContent=linkSetupMode==='invite'||authFragmentType==='invite'?'Create your PAL Evaluation password':'Choose your new password';
+}
+
 function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!value)return;el.textContent=value;el.classList.toggle('success',success)}
 function go(page){if(['analytics','team'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
@@ -22,6 +32,7 @@ async function loadState(){
     const {data:{user:found},error:authError}=await client.auth.getUser();
     if(authError||!found){user=null;profile=null;setVisibility();return}
     user=found;
+    if(passwordSetupPending){showPasswordSetup();return;}
     const prof=await client.from('profiles').select('id, email, full_name, role, active').eq('id',user.id).maybeSingle();
     if(prof.error)throw prof.error;
     profile=prof.data;
@@ -138,9 +149,30 @@ async function firstAdminLink(){
   }
 }
 async function forgot(){const email=$('login-form').elements.email.value.trim();if(!email){message('login-alert','Enter your email address first, then select Reset password.');return}
-  const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});message('login-alert',error?`Could not send reset email: ${error.message}`:'If this account is registered, a password reset email will arrive shortly.',!error);
+  const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:'https://pal-evaluation.vercel.app/?setup=recovery'});message('login-alert',error?`Could not send reset email: ${error.message}`:'If this account is registered, a password reset email will arrive shortly.',!error);
 }
-async function savePassword(e){e.preventDefault();const val=new FormData(e.target).get('password');const {error}=await client.auth.updateUser({password:String(val)});if(error){message('password-alert',error.message);return}message('password-alert','Password saved successfully.',true);await loadState()}
+async function savePassword(e){
+  e.preventDefault();
+  const form=e.currentTarget;
+  const data=new FormData(form);
+  const password=String(data.get('password')||'');
+  const confirm=String(data.get('confirm_password')||'');
+  if(password.length<12){message('password-alert','Use a password of at least 12 characters.');return;}
+  if(password!==confirm){message('password-alert','Passwords do not match.');return;}
+  const submit=form.querySelector('button[type="submit"]');
+  submit.disabled=true;
+  try{
+    const {data:{user:currentUser},error:sessionError}=await client.auth.getUser();
+    if(sessionError||!currentUser){message('password-alert','This setup link has expired or is invalid. Request a new invitation or reset link.');return;}
+    const {error}=await client.auth.updateUser({password});
+    if(error){message('password-alert','Could not update your password: '+error.message);return;}
+    passwordSetupPending=false;
+    form.reset();
+    history.replaceState({},'',location.pathname);
+    message('password-alert','Your password has been saved successfully. You can now use email and password to sign in.',true);
+    await loadState();
+  }finally{submit.disabled=false;}
+}
 async function updateMember(event){const target=event.target,uid=target.dataset.toggle;
   if(uid){const p=people.find(x=>x.id===uid);if(!p||uid===user.id)return;const {error}=await client.from('profiles').update({active:!p.active}).eq('id',uid);if(error){alert(error.message);return}await loadState();go('team')}
   if(target.dataset.membership&&target.value){const {error}=await client.from('cohort_members').insert({user_id:target.dataset.membership,cohort_id:target.value});if(error){alert(error.code==='23505'?'Already assigned to this cohort.':error.message);return}await loadState();go('team')}
@@ -168,5 +200,5 @@ $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
 $('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
 $('session-date').value=dateToday();
-client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){$('app').hidden=true;$('auth-page').hidden=true;$('password-page').hidden=false}else if(event==='SIGNED_OUT'){setVisibility()}});
+client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}});
 loadState();
