@@ -116,6 +116,17 @@ async function login(e){e.preventDefault();const f=new FormData(e.target);messag
   const {error}=await client.auth.signInWithPassword({email:String(f.get('email')).trim(),password:String(f.get('password'))});
   if(error){message('login-alert',error.message);return}await loadState();
 }
+async function firstAdminLink(){
+  const email='nanakwasiohene@playandlearnfoundation.org';
+  const button=$('initial-admin-link');
+  button.disabled=true;
+  const {error}=await client.auth.signInWithOtp({
+    email,
+    options:{shouldCreateUser:true,emailRedirectTo:'https://pal-evaluation-gh.vercel.app/'}
+  });
+  message('login-alert',error?'Could not send setup link: '+error.message:'If email delivery is configured, a secure sign-in link has been sent to the initial PAL administrator.',!error);
+  button.disabled=false;
+}
 async function forgot(){const email=$('login-form').elements.email.value.trim();if(!email){message('login-alert','Enter your email address first, then select Reset password.');return}
   const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});message('login-alert',error?`Could not send reset email: ${error.message}`:'If this account is registered, a password reset email will arrive shortly.',!error);
 }
@@ -142,6 +153,7 @@ $('login-form').addEventListener('submit',login);
 $('password-form').addEventListener('submit',savePassword);
 $('invite-form').addEventListener('submit',invite);
 $('forgot-button').addEventListener('click',forgot);
+$('initial-admin-link').addEventListener('click',firstAdminLink);
 $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
 $('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
