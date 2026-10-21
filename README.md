@@ -18,6 +18,7 @@ Volunteer reporting and cohort evaluation for Play & Learn Foundation. This is a
 - Multiple volunteers per cohort, invitation-based access and roles
 - Session reports, report history, attendance/outcomes, period-based evaluation dashboard, CSV export
 - Super Admin management of cohorts and volunteers
+- **Account Settings → Change email address:** signed-in volunteers/admins enter and confirm a new email; Supabase Auth emails verification links (often to old and new addresses). Once fully verified, a database trigger syncs `public.profiles.email` by user ID without changing roles or cohort assignments. This is not an admin ability to override another member's email.
 - Aggregate child attendance only; do not put identifying information about children in narrative fields
 
 ## Local development
@@ -55,3 +56,7 @@ The `invite-volunteer` Edge Function source is in `supabase/functions/invite-vol
 Run `node --check app.js`, test authentication and invite flows with authorized accounts, verify programme/cohort access via RLS and confirm reporting + analytics behaviour. A successful Vercel build does not prove email delivery, authorization or end-to-end acceptance tests.
 
 Database schema: `supabase/migrations/20261020232500_initial_pal_evaluation.sql`. Already applied; do not rerun unconditionally. Initial administrator bootstrap was applied separately in the hosted database.
+
+### Verified email-change workflow
+
+Use **Account settings** in the PAL Evaluation sidebar to request an email change. The user confirms ownership using Supabase's email-change template (`{{ .ConfirmationURL }}`). Secure email change may require two confirmations. Supabase Auth Site URL must be `https://pal-evaluation.vercel.app/` with `https://pal-evaluation.vercel.app/**` allowed; SMTP must be configured in the dedicated PAL Evaluation Supabase project. The account keeps its existing role and cohort memberships. Users may need to sign back in after verification. Tested at static syntax level only until a real user completes email change in a browser.
