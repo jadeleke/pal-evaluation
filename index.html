@@ -27,6 +27,7 @@
       <button type="button" class="nav-link" data-page="cohorts"><span class="nav-icon">♧</span> Programmes & cohorts</button>
       <button type="button" class="nav-link" data-page="analytics" data-admin hidden><span class="nav-icon">▥</span> Evaluation & analytics</button>
       <button type="button" class="nav-link" data-page="team" data-admin hidden><span class="nav-icon">♙</span> Manage volunteers</button>
+      <button type="button" class="nav-link" data-page="account"><span class="nav-icon">⚙</span> Account settings</button>
     </nav>
     <div class="side-bottom">
       <div class="support-card"><div class="support-icon">✦</div><div class="support-title">Small actions.<br/>Lasting impact.</div><div class="support-sub">Every session tells a story. Help us capture it.</div></div>
@@ -56,6 +57,42 @@
 
       <section id="page-analytics" class="page"><div class="heading-row"><div><div class="eyebrow">EVALUATION AND INSIGHTS</div><h1>Programme performance</h1><p class="muted">Analyse volunteer activity and progress with real session records.</p></div></div><div class="panel"><div class="filters"><select id="analytics-programme" aria-label="Analytics programme"><option value="">All programmes</option></select><select id="analytics-period" aria-label="Analytics period"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option><option value="all">All time</option></select></div><div class="stats-grid" id="analytics-stats"></div><h3>Session reporting by programme</h3><div id="analytics-bars" class="analytics-bars"></div><h3 style="margin-top:30px">Weekly reporting trends</h3><div id="analytics-trend" class="analytics-trend" aria-label="Weekly report counts"></div></div></section>
       <section id="page-team" class="page"><div class="heading-row"><div><div class="eyebrow">ACCESS MANAGEMENT</div><h1>People & cohort access</h1><p class="muted">Invite volunteers, manage access, and assign a cohort.</p></div></div><div class="panel"><h3>Invite a volunteer</h3><form id="invite-form" class="form-grid"><label>Full name *<input name="name" required maxlength="100" placeholder="Volunteer name" /></label><label>Email address *<input name="email" required type="email" placeholder="name@example.com" /></label><label class="span-2">Assign cohort<select name="cohort_id" id="invite-cohort"><option value="">Assign later</option></select></label><div class="span-2"><button class="primary-button" type="submit">Send email invitation</button></div></form><div id="invite-alert" class="form-alert" hidden></div></div><div class="panel" style="margin-top:20px"><h3>Members</h3><div id="people-list" class="people-list"></div></div></section>
+
+      <section id="page-account" class="page">
+        <div class="heading-row">
+          <div><div class="eyebrow">YOUR PAL ACCOUNT</div><h1>Account settings</h1><p class="muted">Manage the email address used to sign in and receive notifications.</p></div>
+        </div>
+        <div class="form-layout">
+          <div class="panel report-form">
+            <div class="form-heading"><span class="icon-box">✉</span><div><h3>Change email address</h3><p>Only the signed-in account owner can request this change.</p></div></div>
+            <div class="form-grid">
+              <label class="span-2">Current email address
+                <input type="email" id="account-current-email" autocomplete="off" readonly aria-readonly="true" />
+              </label>
+            </div>
+            <p id="email-pending-note" class="account-pending" hidden></p>
+            <form id="change-email-form" class="form-grid account-email-form">
+              <label class="span-2">New email address *
+                <input type="email" name="new_email" id="account-new-email" autocomplete="email" maxlength="254" placeholder="new@example.com" required />
+              </label>
+              <label class="span-2">Confirm new email address *
+                <input type="email" name="confirm_email" autocomplete="off" maxlength="254" placeholder="Re-enter the new email" required />
+              </label>
+              <div id="email-change-alert" class="form-alert span-2" role="status" aria-live="polite" hidden></div>
+              <div class="span-2"><button class="primary-button" type="submit">Send confirmation email <span>↗</span></button></div>
+            </form>
+          </div>
+          <aside class="form-aside">
+            <div class="tip-card">
+              <div class="tip-emoji">🔒</div>
+              <h3>Your account stays protected.</h3>
+              <p>For your security, email changes require verification. Depending on your PAL Evaluation authentication settings, confirmation emails may be sent to both your current and new addresses.</p>
+              <div class="tip-divider"></div>
+              <p class="tiny">Your old address remains the login until Supabase finishes verifying the change. Your role, report history, and cohort assignments remain attached to this account.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
       <footer class="footer">PAL Evaluation · Play & Learn Foundation <span>Volunteer reporting and programme impact</span></footer>
     </div>
   </main>
