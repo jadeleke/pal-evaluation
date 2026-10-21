@@ -251,5 +251,5 @@ $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
 $('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
 $('session-date').value=dateToday();
-client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}});
+client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});
 loadState();
