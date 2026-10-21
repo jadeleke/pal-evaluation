@@ -117,15 +117,25 @@ async function login(e){e.preventDefault();const f=new FormData(e.target);messag
   if(error){message('login-alert',error.message);return}await loadState();
 }
 async function firstAdminLink(){
-  const email='nanakwasiohene@playandlearnfoundation.org';
+  const email=String($('login-form').elements.email.value||'').trim().toLowerCase();
+  const authorizedEmails=new Set(['nanakwasiohene@playandlearnfoundation.org','akdeljoseph@outlook.com']);
+  if(!authorizedEmails.has(email)){
+    message('login-alert','Enter a designated PAL Super Admin email address before requesting a setup link.');
+    return;
+  }
   const button=$('initial-admin-link');
   button.disabled=true;
-  const {error}=await client.auth.signInWithOtp({
-    email,
-    options:{shouldCreateUser:true,emailRedirectTo:'https://pal-evaluation-gh.vercel.app/'}
-  });
-  message('login-alert',error?'Could not send setup link: '+error.message:'If email delivery is configured, a secure sign-in link has been sent to the initial PAL administrator.',!error);
-  button.disabled=false;
+  try{
+    const {error}=await client.auth.signInWithOtp({
+      email,
+      options:{shouldCreateUser:true,emailRedirectTo:'https://pal-evaluation-gh.vercel.app/'}
+    });
+    message('login-alert',error?'Could not send sign-in link: '+error.message:'Check your email for the secure PAL Evaluation sign-in link.',!error);
+  }catch(error){
+    message('login-alert','Could not send sign-in link: '+(error?.message||'Unexpected error'));
+  }finally{
+    button.disabled=false;
+  }
 }
 async function forgot(){const email=$('login-form').elements.email.value.trim();if(!email){message('login-alert','Enter your email address first, then select Reset password.');return}
   const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin});message('login-alert',error?`Could not send reset email: ${error.message}`:'If this account is registered, a password reset email will arrive shortly.',!error);
