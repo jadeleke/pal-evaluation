@@ -31,11 +31,11 @@
     </nav>
     <div class="side-bottom">
       <div class="support-card"><div class="support-icon">✦</div><div class="support-title">Small actions.<br/>Lasting impact.</div><div class="support-sub">Every session tells a story. Help us capture it.</div></div>
-      <div class="sidebar-user"><div class="avatar">PAL</div><div><strong id="signed-in-name">PAL team</strong><small id="signed-in-role">Account</small></div><span class="user-dots">···</span></div>
+      <button type="button" class="sidebar-user profile-sidebar-button" data-go="account" id="sidebar-account-button" aria-label="Open account settings" title="Account settings"><span class="avatar" id="sidebar-avatar" aria-hidden="true">P</span><span class="profile-sidebar-details"><strong id="signed-in-name">PAL team</strong><small id="signed-in-role">Account</small></span><span class="user-dots" aria-hidden="true">›</span></button>
     </div>
   </aside>
   <main class="main">
-    <header class="topbar"><div class="top-left"><button class="mobile-menu" id="menu-button" aria-label="Toggle menu">☰</button><span class="breadcrumb">PAL Foundation <span>/</span> <strong id="page-breadcrumb">Overview</strong></span></div><div class="top-right"><button type="button" class="text-link" id="signout-button">Sign out</button><span class="today" id="today-text"></span><div class="mini-avatar">P</div></div></header>
+    <header class="topbar"><div class="top-left"><button class="mobile-menu" id="menu-button" aria-label="Toggle menu">☰</button><span class="breadcrumb">PAL Foundation <span>/</span> <strong id="page-breadcrumb">Overview</strong></span></div><div class="top-right"><button type="button" class="text-link" id="signout-button">Sign out</button><span class="today" id="today-text"></span><button type="button" class="mini-avatar profile-avatar-button" id="topbar-account-button" data-go="account" aria-label="Open account settings" title="Account settings">P</button></div></header>
     <div class="content">
       <section id="page-dashboard" class="page active">
         <div class="heading-row"><div><div class="eyebrow">YOUR IMPACT, AT A GLANCE</div><h1>Good evening, PAL team <span class="sun">✳</span></h1><p class="muted">See how every programme and learning session is progressing.</p></div><button class="primary-button" data-go="new-report"><span>＋</span> New session report</button></div>
