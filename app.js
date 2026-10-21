@@ -128,7 +128,7 @@ async function firstAdminLink(){
   try{
     const {error}=await client.auth.signInWithOtp({
       email,
-      options:{shouldCreateUser:true,emailRedirectTo:'https://pal-evaluation-gh.vercel.app/'}
+      options:{shouldCreateUser:true,emailRedirectTo:'https://pal-evaluation.vercel.app/'}
     });
     message('login-alert',error?'Could not send sign-in link: '+error.message:'Check your email for the secure PAL Evaluation sign-in link.',!error);
   }catch(error){
