@@ -53,10 +53,92 @@
           <div class="form-grid"><label>Programme *<select name="programme" id="programme-select" required><option value="">Select programme</option><option>PAL Tech</option><option>Girl Empowerment</option><option>Mobile Library</option></select></label><label>Cohort *<select name="cohort" id="cohort-select" required><option value="">Select a cohort</option></select></label><label>Session date *<input name="date" id="session-date" type="date" required /></label><label>Session outcome *<select name="outcome" required><option value="">Select outcome</option><option value="completed">Completed</option><option value="partial">Partially completed</option><option value="cancelled">Cancelled</option></select></label><label class="span-2">Co-facilitators<input name="volunteers" maxlength="150" placeholder="Optional additional volunteer names" /><small>Use comma-separated names for co-facilitated sessions.</small></label><label>Children enrolled *<input name="enrolled" type="number" min="0" max="5000" placeholder="e.g., 25" required /></label><label>Children attended *<input name="attended" type="number" min="0" max="5000" placeholder="e.g., 21" required /></label><label class="span-2">Session topic *<input name="topic" maxlength="120" placeholder="e.g., Introduction to digital literacy" required /></label><label class="span-2">Progress assessment *<select name="progress" required><option value="">Select an assessment</option><option value="on_track">On track</option><option value="needs_support">Needs support</option><option value="not_assessed">Not assessed</option></select></label><label class="span-2">Session summary *<textarea name="summary" rows="4" maxlength="2000" placeholder="What did you cover? What went well?" required></textarea></label><label class="span-2">Challenges or observations<textarea name="challenges" rows="3" maxlength="2000" placeholder="Anything the PAL coordinators should know? Do not include identifiable details about children."></textarea></label><label class="span-2">Next steps<textarea name="nextSteps" rows="3" maxlength="2000" placeholder="What should happen before the next meeting?"></textarea></label></div><div id="form-alert" class="form-alert" role="alert" hidden></div><div class="form-footer"><span>🔒 Reports are stored securely and linked to your account.</span><button type="submit" class="primary-button">Submit report <span>↗</span></button></div></form><aside class="form-aside"><div class="tip-card"><div class="tip-emoji">💡</div><h3>Better reports, bigger impact.</h3><p>Be specific about achievements, attendance and what support might be needed next.</p><div class="tip-divider"></div><p class="tiny">Record only aggregate attendance and learning outcomes. Do not include identifiable or sensitive information about children.</p></div><div class="tip-white"><strong>Quick guide</strong><ol><li>Choose your programme and cohort</li><li>Record attendance and outcomes</li><li>Summarise the session</li><li>Submit and review in History</li></ol></div></aside></div>
       </section>
       <section id="page-reports" class="page"><div class="heading-row"><div><div class="eyebrow">SUBMISSION HISTORY</div><h1>Session reports</h1><p class="muted">Review activity across PAL's programmes.</p></div><button class="secondary-button" id="export-csv">↓ Export CSV</button></div><div class="panel history-panel"><div class="filters"><input type="search" id="report-search" placeholder="Search reports, topics or volunteers..." aria-label="Search reports" /><select id="report-filter" aria-label="Filter programme"><option value="">All programmes</option><option>PAL Tech</option><option>Girl Empowerment</option><option>Mobile Library</option></select></div><div class="table-wrap"><table><thead><tr><th>TOPIC / COHORT</th><th>PROGRAMME</th><th>DATE</th><th>ATTENDANCE</th><th>OUTCOME</th><th></th></tr></thead><tbody id="reports-tbody"></tbody></table></div><div id="reports-empty" class="empty" hidden>No reports match the filters.</div></div></section>
-      <section id="page-cohorts" class="page"><div class="heading-row"><div><div class="eyebrow">PROGRAMME OPERATIONS</div><h1>Programmes & cohorts</h1><p class="muted">Manage groups and see which volunteers support them.</p></div><button class="primary-button" id="add-cohort-button">＋ Add cohort</button></div><div class="cohort-grid" id="cohort-grid"></div><div class="panel cohort-add-panel" id="cohort-add-panel" hidden><h3>Create a cohort</h3><form id="cohort-form" class="form-grid"><label>Programme *<select name="programme" required><option>PAL Tech</option><option>Girl Empowerment</option><option>Mobile Library</option></select></label><label>Cohort name *<input name="name" maxlength="80" placeholder="e.g., January 2027 Group" required /></label><label class="span-2">Description<input name="description" maxlength="150" placeholder="Optional cohort details" /></label><div class="span-2"><button type="submit" class="primary-button">Save cohort</button></div></form></div></section>
-
-      <section id="page-analytics" class="page"><div class="heading-row"><div><div class="eyebrow">EVALUATION AND INSIGHTS</div><h1>Programme performance</h1><p class="muted">Analyse volunteer activity and progress with real session records.</p></div></div><div class="panel"><div class="filters"><select id="analytics-programme" aria-label="Analytics programme"><option value="">All programmes</option></select><select id="analytics-period" aria-label="Analytics period"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 12 months</option><option value="all">All time</option></select></div><div class="stats-grid" id="analytics-stats"></div><h3>Session reporting by programme</h3><div id="analytics-bars" class="analytics-bars"></div><h3 style="margin-top:30px">Weekly reporting trends</h3><div id="analytics-trend" class="analytics-trend" aria-label="Weekly report counts"></div></div></section>
-      <section id="page-team" class="page"><div class="heading-row"><div><div class="eyebrow">ACCESS MANAGEMENT</div><h1>People & cohort access</h1><p class="muted">Invite volunteers, manage access, and assign a cohort.</p></div></div><div class="panel"><h3>Invite a volunteer</h3><form id="invite-form" class="form-grid"><label>Full name *<input name="name" required maxlength="100" placeholder="Volunteer name" /></label><label>Email address *<input name="email" required type="email" placeholder="name@example.com" /></label><label class="span-2">Assign cohort<select name="cohort_id" id="invite-cohort"><option value="">Assign later</option></select></label><div class="span-2"><button class="primary-button" type="submit">Send email invitation</button></div></form><div id="invite-alert" class="form-alert" hidden></div></div><div class="panel" style="margin-top:20px"><h3>Members</h3><div id="people-list" class="people-list"></div></div></section>
+      <section id="page-cohorts" class="page">
+  <div class="heading-row">
+    <div><div class="eyebrow">PROGRAMME OPERATIONS</div><h1>Programmes & cohorts</h1>
+      <p class="muted">Plan cohort dates, assign a leader, and build the volunteer team.</p></div>
+    <button type="button" class="primary-button" id="add-cohort-button">＋ Add cohort</button>
+  </div>
+  <div class="cohort-grid" id="cohort-grid"></div>
+  <div class="panel cohort-add-panel" id="cohort-add-panel" hidden>
+    <div class="panel-head"><div><h3>Create a cohort</h3>
+      <p>Choose dates and optional people. Assignments grant access to this cohort.</p></div>
+      <button type="button" class="text-link" id="cohort-form-cancel">Cancel</button>
+    </div>
+    <form id="cohort-form" class="form-grid">
+      <label>Programme *<select name="programme" required><option value="">Select a programme</option></select></label>
+      <label>Cohort name *<input name="name" maxlength="80" placeholder="e.g., January 2027 Group" required /></label>
+      <label>Start date *<input name="start_date" type="date" required /></label>
+      <label>End date *<input name="end_date" type="date" required /></label>
+      <label class="span-2">Description<input name="description" maxlength="500" placeholder="Optional cohort goals or location; no personal data about children" /></label>
+      <label class="span-2">Cohort leader (optional)<select name="leader_id" id="cohort-leader">
+        <option value="">No leader assigned yet</option>
+      </select><small>Choose an active volunteer or administrator. A selected leader is also added to the cohort team.</small></label>
+      <div class="span-2 staff-field">
+        <div class="staff-head"><strong>Additional volunteers / admins (optional)</strong><small id="cohort-staff-count">No additional team members selected</small></div>
+        <input id="cohort-staff-search" type="search" placeholder="Search people by name or email" aria-label="Search volunteers and administrators" />
+        <div id="cohort-staff-options" class="staff-options" role="group" aria-label="Additional cohort members"></div>
+        <small>Choose one or more existing, active PAL members. Invite new members under Manage volunteers first.</small>
+      </div>
+      <div id="cohort-form-alert" class="form-alert span-2" role="alert" hidden></div>
+      <div class="span-2 cohort-form-actions"><button type="submit" class="primary-button">Save cohort and team</button></div>
+    </form>
+  </div>
+</section>
+<section id="page-analytics" class="page">
+  <div class="heading-row">
+    <div><div class="eyebrow">EVALUATION AND INSIGHTS</div><h1>Programme performance</h1>
+      <p class="muted">Explore attendance, outcomes, learning progress, and cohort activity using submitted reports.</p></div>
+    <button type="button" class="secondary-button" id="analytics-export">↓ Export filtered data</button>
+  </div>
+  <div class="panel analytics-filter-panel">
+    <div class="panel-head"><div><h3>Explore your data</h3><p>All filters apply to the metrics, charts and exported data.</p></div>
+      <button type="button" class="text-link" id="analytics-reset">Reset filters</button>
+    </div>
+    <div class="analytics-filter-grid">
+      <label>Time period<select id="analytics-period">
+        <option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option><option value="365">Last 12 months</option>
+        <option value="all">All time</option><option value="custom">Custom dates</option>
+      </select></label>
+      <label>Programme<select id="analytics-programme"><option value="">All programmes</option></select></label>
+      <label>Cohort<select id="analytics-cohort"><option value="">All cohorts</option></select></label>
+      <label>Leader<select id="analytics-leader"><option value="">All leaders</option></select></label>
+      <label>Session outcome<select id="analytics-outcome"><option value="">All outcomes</option>
+        <option value="completed">Completed</option><option value="partial">Partially completed</option>
+        <option value="cancelled">Cancelled</option></select></label>
+      <label>Learning progress<select id="analytics-progress"><option value="">All assessments</option>
+        <option value="on_track">On track</option><option value="needs_support">Needs support</option>
+        <option value="not_assessed">Not assessed</option></select></label>
+      <label>Trend interval<select id="analytics-granularity">
+        <option value="week">By week</option><option value="month">By month</option>
+      </select></label>
+      <div id="analytics-custom-dates" class="analytics-custom-dates" hidden>
+        <label>From<input id="analytics-from" type="date" /></label>
+        <label>To<input id="analytics-to" type="date" /></label>
+      </div>
+    </div>
+    <div id="analytics-filter-error" class="form-alert" role="alert" hidden></div>
+    <p class="analytics-summary" id="analytics-summary" aria-live="polite"></p>
+  </div>
+  <div class="stats-grid" id="analytics-stats"></div>
+  <div class="analytics-panels">
+    <div class="panel"><div class="panel-head"><div><h3>Session volume by programme</h3><p>How reporting activity is distributed</p></div></div>
+      <div id="analytics-bars" class="analytics-bars"></div></div>
+    <div class="panel"><div class="panel-head"><div><h3>Outcome breakdown</h3><p>Completed, partial and cancelled sessions</p></div></div>
+      <div id="analytics-outcomes" class="analytics-bars"></div></div>
+    <div class="panel"><div class="panel-head"><div><h3>Learning progress</h3><p>Volunteer assessments across sessions</p></div></div>
+      <div id="analytics-progress-bars" class="analytics-bars"></div></div>
+    <div class="panel"><div class="panel-head"><div><h3>Reporting trend</h3><p>Report submissions grouped by session date</p></div></div>
+      <div id="analytics-trend" class="analytics-trend" aria-label="Session report trend"></div></div>
+  </div>
+  <div class="panel analytics-table-panel"><div class="panel-head"><div><h3>Cohort comparison</h3>
+    <p>Compare team leads, sessions, attendance and reporting outcomes.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>COHORT</th><th>LEADER</th><th>SESSIONS</th><th>CHECK-INS</th><th>ATTENDANCE RATE</th><th>COMPLETED</th></tr></thead><tbody id="analytics-cohort-tbody"></tbody></table></div>
+    <div id="analytics-empty" class="empty" hidden>No session reports match the current filters.</div>
+  </div>
+</section>
+<section id="page-team" class="page"><div class="heading-row"><div><div class="eyebrow">ACCESS MANAGEMENT</div><h1>People & cohort access</h1><p class="muted">Invite volunteers, manage access, and assign a cohort.</p></div></div><div class="panel"><h3>Invite a volunteer</h3><form id="invite-form" class="form-grid"><label>Full name *<input name="name" required maxlength="100" placeholder="Volunteer name" /></label><label>Email address *<input name="email" required type="email" placeholder="name@example.com" /></label><label class="span-2">Assign cohort<select name="cohort_id" id="invite-cohort"><option value="">Assign later</option></select></label><div class="span-2"><button class="primary-button" type="submit">Send email invitation</button></div></form><div id="invite-alert" class="form-alert" hidden></div></div><div class="panel" style="margin-top:20px"><h3>Members</h3><div id="people-list" class="people-list"></div></div></section>
 
       <section id="page-account" class="page">
         <div class="heading-row">
