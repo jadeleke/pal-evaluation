@@ -12,7 +12,7 @@ const statusClass=s=>s==='completed'?'completed':s==='partial'?'partial':'cancel
 const emoji=p=>p==='PAL Tech'?'💻':p==='Girl Empowerment'?'🌸':'📚';
 const slug=p=>p==='PAL Tech'?'tech':p==='Girl Empowerment'?'girls':'library';
 let user=null, profile=null, programmes=[], cohorts=[], reports=[], people=[],memberships=[];
-let activePage='dashboard', loading=false;
+let activePage='dashboard', loading=false, refreshQueued=false;
 const linkSetupMode = new URLSearchParams(location.search).get('setup');
 const authFragmentType = new URLSearchParams(location.hash.slice(1)).get('type');
 let passwordSetupPending = ['invite','recovery'].includes(linkSetupMode) || ['invite','recovery'].includes(authFragmentType);
@@ -27,7 +27,7 @@ function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!val
 function go(page){if(['analytics','team'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
 async function loadState(){
-  if(loading)return;loading=true;
+  if(loading){refreshQueued=true;return;}loading=true;
   try {
     const {data:{user:found},error:authError}=await client.auth.getUser();
     if(authError||!found){user=null;profile=null;setVisibility();return}
@@ -54,7 +54,7 @@ async function loadState(){
     memberships=admin?result[4].data||[]:[];
     setVisibility(true);render();
   } catch(err) {console.error(err);message('login-alert',`Could not load PAL data: ${err.message||'Unexpected error'}`);setVisibility();}
-  finally{loading=false}
+  finally{loading=false;if(refreshQueued){refreshQueued=false;setTimeout(()=>loadState(),0);}}
 }
 function renderDashboard(){
   const activeCohorts=cohorts.filter(c=>c.status==='active').length;
@@ -223,6 +223,15 @@ async function requestEmailChange(event){
     message('email-change-alert','Could not request the email change: '+(error?.message||'Unexpected error'));
   }finally{button.disabled=false;}
 }
+async function sendMyPasswordReset(){
+  const button=$('account-reset-password');
+  if(!user?.email){message('account-reset-alert','Please sign in again.');return;}
+  button.disabled=true;
+  try{
+    const {error}=await client.auth.resetPasswordForEmail(user.email,{redirectTo:'https://pal-evaluation.vercel.app/?setup=recovery'});
+    message('account-reset-alert',error?'Could not send password link: '+error.message:'If email delivery is working, a secure password reset link has been sent to your registered email.',!error);
+  }finally{button.disabled=false;}
+}
 async function updateMember(event){const target=event.target,uid=target.dataset.toggle;
   if(uid){const p=people.find(x=>x.id===uid);if(!p||uid===user.id)return;const {error}=await client.from('profiles').update({active:!p.active}).eq('id',uid);if(error){alert(error.message);return}await loadState();go('team')}
   if(target.dataset.membership&&target.value){const {error}=await client.from('cohort_members').insert({user_id:target.dataset.membership,cohort_id:target.value});if(error){alert(error.code==='23505'?'Already assigned to this cohort.':error.message);return}await loadState();go('team')}
@@ -245,6 +254,7 @@ $('login-form').addEventListener('submit',login);
 $('password-form').addEventListener('submit',savePassword);
 $('invite-form').addEventListener('submit',invite);
 $('change-email-form').addEventListener('submit',requestEmailChange);
+$('account-reset-password').addEventListener('click',sendMyPasswordReset);
 $('forgot-button').addEventListener('click',forgot);
 $('initial-admin-link').addEventListener('click',firstAdminLink);
 $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
