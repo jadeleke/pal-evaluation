@@ -6,3 +6,31 @@
 .account-pending{margin:18px 0 0;padding:12px 14px;border-radius:9px;color:#476547;background:#edf6ea;font-size:12px;line-height:1.65}
 #account-current-email[readonly]{background:#f5f8f5;color:#4b6254;cursor:default}
 #email-change-alert{line-height:1.65}
+
+/* Both profile shortcuts open Account Settings with keyboard and touch support. */
+.profile-avatar-button{
+  appearance:none;
+  border:2px solid transparent;
+  padding:0;
+  cursor:pointer;
+  flex-shrink:0;
+  transition:transform .15s ease,box-shadow .15s ease,background-color .15s ease;
+}
+.profile-avatar-button:hover{background:#bce975;transform:translateY(-1px);box-shadow:0 3px 10px rgba(18,51,39,.14)}
+.profile-avatar-button:focus-visible{outline:3px solid #47956e;outline-offset:3px}
+.profile-sidebar-button{
+  appearance:none;
+  width:100%;
+  text-align:left;
+  background:transparent;
+  color:inherit;
+  border-left:0;
+  border-right:0;
+  border-bottom:0;
+  cursor:pointer;
+  border-radius:0 0 9px 9px;
+}
+.profile-sidebar-button:hover{background:rgba(255,255,255,.07)}
+.profile-sidebar-button:focus-visible{outline:3px solid #c9ef7c;outline-offset:2px}
+.profile-sidebar-details{min-width:0;flex:1}
+.profile-sidebar-details strong,.profile-sidebar-details small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
