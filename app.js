@@ -24,7 +24,7 @@ function showPasswordSetup(){
 }
 
 function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!value)return;el.textContent=value;el.classList.toggle('success',success)}
-function go(page){if(['analytics','team'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
+function go(page){if(['analytics','team'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
 async function loadState(){
   if(loading)return;loading=true;
@@ -102,7 +102,7 @@ function renderAnalytics(){if(profile?.role!=='super_admin')return;
 function renderPeople(){if(profile?.role!=='super_admin')return;
   $('people-list').innerHTML=people.length?people.map(p=>`<div class="person-row"><div><strong>${esc(p.full_name||p.email)}</strong><small>${esc(p.email)} · ${esc(p.role.replace('_',' '))}</small></div><select data-membership="${esc(p.id)}" aria-label="Assign cohort"><option value="">${memberships.some(m=>m.user_id===p.id)?'Add another cohort':'Assign a cohort'}</option>${cohorts.map(c=>`<option value="${esc(c.id)}">${esc(c.programme)} / ${esc(c.name)}</option>`).join('')}</select><button class="secondary-button" data-toggle="${esc(p.id)}" ${p.id===user.id?'disabled':''}>${p.active?'Deactivate':'Activate'}</button></div>`).join(''):'<div class="empty-wide">No members have been invited.</div>';
 }
-function render(){renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople()}
+function render(){renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople();renderAccount()}
 function showDetail(id){const r=reports.find(x=>x.id===id);if(!r)return;
   const labels=[['Session date',fmt(r.date)],['Co-facilitators',r.volunteers||'None specified'],['Attendance',r.attended+' of '+r.enrolled],['Outcome',outcomeText[r.outcome]||r.outcome],['Learning progress',progressText[r.progress]||r.progress]];
   $('dialog-content').innerHTML=`<div class="eyebrow">SESSION REPORT</div><h2 class="dialog-title">${esc(r.topic)}</h2><div class="dialog-pill">${esc(r.programme)} · ${esc(r.cohort)}</div><div class="dialog-meta">${labels.map(([k,v])=>`<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join('')}</div><div class="dialog-label">SUMMARY</div><p class="dialog-copy">${esc(r.summary)}</p><div class="dialog-label">CHALLENGES</div><p class="dialog-copy">${esc(r.challenges||'None recorded')}</p><div class="dialog-label">NEXT STEPS</div><p class="dialog-copy">${esc(r.nextSteps||'None recorded')}</p>`;$('details-dialog').showModal();
@@ -173,6 +173,56 @@ async function savePassword(e){
     await loadState();
   }finally{submit.disabled=false;}
 }
+
+function renderAccount(){
+  if(!user)return;
+  $('account-current-email').value=user.email||profile?.email||'';
+  const pending=String(user.new_email||'').trim();
+  const note=$('email-pending-note');
+  note.hidden=!pending;
+  note.textContent=pending
+    ? 'Pending email change: '+pending+'. Follow the verification instructions sent by Supabase to complete this change.'
+    : '';
+}
+async function requestEmailChange(event){
+  event.preventDefault();
+  const form=event.currentTarget;
+  const next=String(form.elements.new_email.value||'').trim().toLowerCase();
+  const confirm=String(form.elements.confirm_email.value||'').trim().toLowerCase();
+  message('email-change-alert','');
+  if(!next||!form.elements.new_email.validity.valid){
+    message('email-change-alert','Enter a valid new email address.');
+    return;
+  }
+  if(next!==confirm){
+    message('email-change-alert','The two email addresses do not match.');
+    return;
+  }
+  const button=form.querySelector('[type="submit"]');
+  button.disabled=true;
+  try{
+    const {data:{user:currentUser},error:authError}=await client.auth.getUser();
+    if(authError||!currentUser){
+      message('email-change-alert','Your session has expired. Sign in again and retry.');
+      return;
+    }
+    if(next===String(currentUser.email||'').toLowerCase()){
+      message('email-change-alert','This is already your current email address.');
+      return;
+    }
+    const {error}=await client.auth.updateUser(
+      {email:next},
+      {emailRedirectTo:'https://pal-evaluation.vercel.app/'}
+    );
+    if(error)throw error;
+    message('email-change-alert','Request received. Check your current and new email inboxes for verification messages. The change takes effect only after confirmation.',true);
+    form.reset();
+    const {data:{user:refreshed}}=await client.auth.getUser();
+    if(refreshed){user=refreshed;renderAccount();}
+  }catch(error){
+    message('email-change-alert','Could not request the email change: '+(error?.message||'Unexpected error'));
+  }finally{button.disabled=false;}
+}
 async function updateMember(event){const target=event.target,uid=target.dataset.toggle;
   if(uid){const p=people.find(x=>x.id===uid);if(!p||uid===user.id)return;const {error}=await client.from('profiles').update({active:!p.active}).eq('id',uid);if(error){alert(error.message);return}await loadState();go('team')}
   if(target.dataset.membership&&target.value){const {error}=await client.from('cohort_members').insert({user_id:target.dataset.membership,cohort_id:target.value});if(error){alert(error.code==='23505'?'Already assigned to this cohort.':error.message);return}await loadState();go('team')}
@@ -194,6 +244,7 @@ $('people-list').addEventListener('change',updateMember);
 $('login-form').addEventListener('submit',login);
 $('password-form').addEventListener('submit',savePassword);
 $('invite-form').addEventListener('submit',invite);
+$('change-email-form').addEventListener('submit',requestEmailChange);
 $('forgot-button').addEventListener('click',forgot);
 $('initial-admin-link').addEventListener('click',firstAdminLink);
 $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
