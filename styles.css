@@ -63,3 +63,5 @@
 @media(max-width:1130px){.analytics-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.analytics-panels{grid-template-columns:1fr}}
 @media(max-width:760px){.analytics-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.analytics-custom-dates{grid-column:span 2}.cohort-form-actions button{width:100%}}
 @media(max-width:460px){.analytics-filter-grid{grid-template-columns:1fr}.analytics-custom-dates{grid-column:span 1;flex-direction:column;align-items:stretch}.analytics-panels .analytics-bar-row{grid-template-columns:90px minmax(0,1fr) 25px}.staff-options{grid-template-columns:1fr}}
+
+.public-report-page{max-width:850px;margin:40px auto;padding:24px}.public-report-page .report-form{margin-top:24px}.spam-field{position:absolute!important;left:-10000px!important;width:1px;height:1px;overflow:hidden}.form-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}#public-forms-list{margin-top:24px}#public-share-link{width:100%}#public-status{white-space:pre-wrap}

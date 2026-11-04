@@ -1,3 +1,4 @@
+import { mountPublicForms } from './public-forms.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 // Browser-safe publishable key. Never put a Supabase secret/service_role key here.
@@ -48,9 +49,10 @@ function showPasswordSetup(){
 }
 
 function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!value)return;el.textContent=value;el.classList.toggle('success',success)}
-function go(page){if(['analytics','team'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
+function go(page){if(['analytics','team','forms'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
 async function loadState(){
+  if(publicForms.publicMode)return;
   if(loading){refreshQueued=true;return;}loading=true;
   try {
     const {data:{user:found},error:authError}=await client.auth.getUser();
@@ -66,13 +68,15 @@ async function loadState(){
     $('add-cohort-button').hidden=!admin;
     renderProfileShortcut();
     $('today-text').textContent=new Intl.DateTimeFormat('en-GB',{dateStyle:'medium'}).format(new Date());
-    let queries=[client.from('programmes').select('id,name,active').order('name'),client.from('cohorts').select('id,name,status,programme_id,description,start_date,end_date,leader_id,programmes(name)').order('name'),client.from('session_reports').select('id,cohort_id,reporter_id,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators,cohorts(name,programmes(name))').order('session_date',{ascending:false}).limit(1000)];
+    let queries=[client.from('programmes').select('id,name,active').order('name'),client.from('cohorts').select('id,name,status,programme_id,description,start_date,end_date,leader_id,programmes(name)').order('name'),publicForms.allRows('session_reports','id,cohort_id,reporter_id,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators,cohorts(name,programmes(name))').then(data=>({data}))];
     if(admin)queries.push(client.from('profiles').select('id,email,full_name,role,active').order('created_at',{ascending:false}),client.from('cohort_members').select('cohort_id,user_id'));
     const result=await Promise.all(queries);
     const firstError=result.find(r=>r.error)?.error;if(firstError)throw firstError;
     programmes=result[0].data||[];
     cohorts=(result[1].data||[]).map(c=>({...c,programme:c.programmes?.name||'Unknown'}));
-    reports=(result[2].data||[]).map(r=>({...r,programme:r.cohorts?.programmes?.name||'Unknown',cohort:r.cohorts?.name||'Unknown',date:r.session_date,attended:r.attended_count,enrolled:r.enrolled_count,volunteers:r.co_facilitators,nextSteps:r.next_steps}));
+    const publicReports=admin?await publicForms.load():[];
+    reports=[...(result[2].data||[]),...publicReports.map(r=>({...r,source:'public',cohorts:{name:cohorts.find(c=>c.id===r.cohort_id)?.name,programmes:{name:cohorts.find(c=>c.id===r.cohort_id)?.programme}}}))].map(r=>({...r,programme:r.cohorts?.programmes?.name||'Unknown',cohort:r.cohorts?.name||'Unknown',date:r.session_date,attended:r.attended_count,enrolled:r.enrolled_count,volunteers:r.co_facilitators,nextSteps:r.next_steps}));
+    reports.sort((a,b)=>b.date.localeCompare(a.date));
     people=admin?result[3].data||[]:[];
     memberships=admin?result[4].data||[]:[];
     setVisibility(true);render();
@@ -113,8 +117,8 @@ function renderSelectors(){
  leader.innerHTML='<option value="">No leader assigned yet</option>'+people.filter(p=>p.active).map(p=>'<option value="'+esc(p.id)+'">'+esc(p.full_name||p.email)+' ('+esc(p.role.replace('_',' '))+')</option>').join('');
  if(people.some(p=>p.id===chosen&&p.active))leader.value=chosen;
  renderStaffOptions();
- const selections=[['analytics-programme',programmes.map(p=>({id:p.name,label:p.name})),'All programmes'],['analytics-cohort',cohorts.map(c=>({id:c.id,label:c.programme+' / '+c.name})),'All cohorts'],['analytics-leader',people.filter(p=>p.active).map(p=>({id:p.id,label:p.full_name||p.email})),'All leaders']];
- for(const [id,items,defaultLabel] of selections){const el=$(id),value=el.value;el.innerHTML='<option value="">'+defaultLabel+'</option>'+items.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');if(items.some(x=>x.id===value))el.value=value;}
+ const selections=[['analytics-programme',programmes.map(p=>({id:p.name,label:p.name})),'All programmes'],['analytics-cohort',cohorts.map(c=>({id:c.id,label:c.programme+' / '+c.name})),'Choose a cohort'],['analytics-leader',people.filter(p=>p.active).map(p=>({id:p.id,label:p.full_name||p.email})),'All leaders']];
+ for(const [id,items,defaultLabel] of selections){const el=$(id),value=el.value;if(id==='analytics-cohort')items.unshift({id:'__all__',label:'Organization overview (all cohorts)'});el.innerHTML='<option value="">'+defaultLabel+'</option>'+items.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.label)+'</option>').join('');if(items.some(x=>x.id===value))el.value=value;}
 }
 let selectedStaff=new Set();
 function renderStaffOptions(){
@@ -130,7 +134,8 @@ function filteredAnalytics(){
  let from=null,to=null;const today=dateToday();
  if(period==='custom'){from=$('analytics-from').value||null;to=$('analytics-to').value||null;}
  else if(period!=='all'){const d=new Date(today+'T12:00:00');d.setDate(d.getDate()-Number(period)+1);from=dateTodayFrom(d);to=today;}
- return reports.filter(r=>(!programme||r.programme===programme)&&(!cohort||r.cohort_id===cohort)&&(!leader||cohorts.find(c=>c.id===r.cohort_id)?.leader_id===leader)&&(!outcome||r.outcome===outcome)&&(!progress||r.progress===progress)&&(!from||r.date>=from)&&(!to||r.date<=to));
+ if(!cohort||(from&&to&&from>to))return [];
+ return reports.filter(r=>(!programme||r.programme===programme)&&(cohort==='__all__'||r.cohort_id===cohort)&&(!leader||cohorts.find(c=>c.id===r.cohort_id)?.leader_id===leader)&&(!outcome||r.outcome===outcome)&&(!progress||r.progress===progress)&&(!from||r.date>=from)&&(!to||r.date<=to));
 }
 function dateTodayFrom(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function metricBar(name,value,max){return '<div class="analytics-bar-row"><strong>'+esc(name)+'</strong><div class="analytics-bar-track"><div class="analytics-bar-fill" style="width:'+(max?100*value/max:0)+'%"></div></div><span>'+value+'</span></div>';}
@@ -140,7 +145,7 @@ function renderAnalytics(){
  const from=$('analytics-from').value,to=$('analytics-to').value,invalid=$('analytics-period').value==='custom'&&from&&to&&from>to;
  message('analytics-filter-error',invalid?'The start date must be on or before the end date.':'');
  const subset=invalid?[]:filteredAnalytics(),sessions=subset.length,attendance=subset.reduce((n,r)=>n+Number(r.attended||0),0),enrolled=subset.reduce((n,r)=>n+Number(r.enrolled||0),0),completed=subset.filter(r=>r.outcome==='completed').length;
- $('analytics-summary').textContent=sessions+' session reports match the selected filters. Attendance is session check-ins, not unique children.';
+ $('analytics-summary').textContent=(!$('analytics-cohort').value?'Choose one cohort to view its analytics. Select Organization overview only for combined figures. ': '')+sessions+' session reports match the selected filters. Attendance is session check-ins, not unique children.';
  const stats=[['Sessions',sessions,'Reports in the selected range'],['Session check-ins',attendance,'Not unique participants'],['Attendance rate',enrolled?Math.round(100*attendance/enrolled)+'%':'—','Check-ins / enrolled places'],['Completion rate',sessions?Math.round(100*completed/sessions)+'%':'—','Completed sessions'],['Need support',subset.filter(r=>r.progress==='needs_support').length,'Session assessments'],['Active reporting cohorts',new Set(subset.map(r=>r.cohort_id)).size,'Distinct cohorts with reports']];
  $('analytics-stats').innerHTML=stats.map(([name,val,desc])=>'<div class="stat-card"><div class="stat-top">'+esc(name)+'</div><div class="stat-value">'+val+'</div><div class="stat-footer">'+esc(desc)+'</div></div>').join('');
  const pm=programmes.map(p=>({name:p.name,n:subset.filter(r=>r.programme===p.name).length}));$('analytics-bars').innerHTML=pm.map(p=>metricBar(p.name,p.n,Math.max(1,...pm.map(x=>x.n)))).join('');
@@ -154,7 +159,7 @@ function renderAnalytics(){
  buckets.set(key,(buckets.get(key)||0)+1);}
  const data=[...buckets].sort((a,b)=>a[0].localeCompare(b[0])).slice(-24),peak=Math.max(1,...data.map(x=>x[1]));
  $('analytics-trend').innerHTML=data.length?data.map(([key,n])=>'<div class="trend-col"><strong>'+n+'</strong><div class="trend-stick" style="height:'+Math.max(5,n/peak*110)+'px"></div><span>'+esc(key)+'</span></div>').join(''):'<div class="empty-wide">No reports for these filters.</div>';
- const cohortRows=cohorts.filter(c=>(!$('analytics-programme').value||c.programme===$('analytics-programme').value)&&(!$('analytics-cohort').value||c.id===$('analytics-cohort').value)&&(!$('analytics-leader').value||c.leader_id===$('analytics-leader').value)).map(c=>{const data=subset.filter(r=>r.cohort_id===c.id),att=data.reduce((n,r)=>n+Number(r.attended),0),en=data.reduce((n,r)=>n+Number(r.enrolled),0);return {c,data,att,en};}).filter(x=>x.data.length);
+ const cohortRows=cohorts.filter(c=>(!$('analytics-programme').value||c.programme===$('analytics-programme').value)&&($('analytics-cohort').value==='__all__'||c.id===$('analytics-cohort').value)&&(!$('analytics-leader').value||c.leader_id===$('analytics-leader').value)).map(c=>{const data=subset.filter(r=>r.cohort_id===c.id),att=data.reduce((n,r)=>n+Number(r.attended),0),en=data.reduce((n,r)=>n+Number(r.enrolled),0);return {c,data,att,en};}).filter(x=>x.data.length);
  $('analytics-cohort-tbody').innerHTML=cohortRows.map(x=>'<tr><td><strong>'+esc(x.c.name)+'</strong><small>'+esc(x.c.programme)+'</small></td><td>'+esc(x.c.leader_id?personName(x.c.leader_id):'Unassigned')+'</td><td>'+x.data.length+'</td><td>'+x.att+'</td><td>'+(x.en?Math.round(x.att/x.en*100)+'%':'—')+'</td><td>'+x.data.filter(r=>r.outcome==='completed').length+'</td></tr>').join('');
  $('analytics-empty').hidden=cohortRows.length>0;
 }
@@ -165,10 +170,10 @@ function exportAnalytics(){const data=filteredAnalytics(),fields=['programme','c
 function renderPeople(){if(profile?.role!=='super_admin')return;
   $('people-list').innerHTML=people.length?people.map(p=>`<div class="person-row"><div><strong>${esc(p.full_name||p.email)}</strong><small>${esc(p.email)} · ${esc(p.role.replace('_',' '))}</small></div><select data-membership="${esc(p.id)}" aria-label="Assign cohort"><option value="">${memberships.some(m=>m.user_id===p.id)?'Add another cohort':'Assign a cohort'}</option>${cohorts.map(c=>`<option value="${esc(c.id)}">${esc(c.programme)} / ${esc(c.name)}</option>`).join('')}</select><button class="secondary-button" data-toggle="${esc(p.id)}" ${p.id===user.id?'disabled':''}>${p.active?'Deactivate':'Activate'}</button></div>`).join(''):'<div class="empty-wide">No members have been invited.</div>';
 }
-function render(){renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople();renderAccount()}
+function render(){if(profile?.role==='super_admin')publicForms.render(cohorts);renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople();renderAccount()}
 function showDetail(id){const r=reports.find(x=>x.id===id);if(!r)return;
   const labels=[['Session date',fmt(r.date)],['Co-facilitators',r.volunteers||'None specified'],['Attendance',r.attended+' of '+r.enrolled],['Outcome',outcomeText[r.outcome]||r.outcome],['Learning progress',progressText[r.progress]||r.progress]];
-  $('dialog-content').innerHTML=`<div class="eyebrow">SESSION REPORT</div><h2 class="dialog-title">${esc(r.topic)}</h2><div class="dialog-pill">${esc(r.programme)} · ${esc(r.cohort)}</div><div class="dialog-meta">${labels.map(([k,v])=>`<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join('')}</div><div class="dialog-label">SUMMARY</div><p class="dialog-copy">${esc(r.summary)}</p><div class="dialog-label">CHALLENGES</div><p class="dialog-copy">${esc(r.challenges||'None recorded')}</p><div class="dialog-label">NEXT STEPS</div><p class="dialog-copy">${esc(r.nextSteps||'None recorded')}</p>`;$('details-dialog').showModal();
+  $('dialog-content').innerHTML=`<div class="eyebrow">SESSION REPORT</div><h2 class="dialog-title">${esc(r.topic)}</h2><div class="dialog-pill">${esc(r.programme)} · ${esc(r.cohort)}</div><div class="dialog-meta">${labels.map(([k,v])=>`<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join('')}</div>${r.source==='public'?'<p>Public submission · self-reported by '+esc(r.reporter_name)+' ('+esc(r.reporter_email)+')</p>':''}<div class="dialog-label">SUMMARY</div><p class="dialog-copy">${esc(r.summary)}</p><div class="dialog-label">CHALLENGES</div><p class="dialog-copy">${esc(r.challenges||'None recorded')}</p><div class="dialog-label">NEXT STEPS</div><p class="dialog-copy">${esc(r.nextSteps||'None recorded')}</p>`;$('details-dialog').showModal();
 }
 async function submitReport(e){e.preventDefault();const f=new FormData(e.currentTarget),en=Number(f.get('enrolled')),at=Number(f.get('attended'));
   if(!Number.isInteger(en)||!Number.isInteger(at)||en<0||at<0||at>en){message('form-alert','Attendance must be a whole number between zero and enrolment.');return}
@@ -309,6 +314,8 @@ async function updateMember(event){const target=event.target,uid=target.dataset.
   if(uid){const p=people.find(x=>x.id===uid);if(!p||uid===user.id)return;const {error}=await client.from('profiles').update({active:!p.active}).eq('id',uid);if(error){alert(error.message);return}await loadState();go('team')}
   if(target.dataset.membership&&target.value){const {error}=await client.from('cohort_members').insert({user_id:target.dataset.membership,cohort_id:target.value});if(error){alert(error.code==='23505'?'Already assigned to this cohort.':error.message);return}await loadState();go('team')}
 }
+const publicForms=mountPublicForms(client,{esc,refresh:loadState,today:dateToday});
+
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
 $('report-form').addEventListener('submit',submitReport);
@@ -340,5 +347,5 @@ $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
 $('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
 $('session-date').value=dateToday();
-client.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});
-loadState();
+client.auth.onAuthStateChange((event)=>{if(publicForms.publicMode)return;if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});
+if(publicForms.publicMode)publicForms.start();else loadState();

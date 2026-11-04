@@ -1,0 +1,78 @@
+-- Run as database owner. Synthetic Auth identities and data are rolled back.
+begin;
+create temporary table pal_test_context(admin_id uuid,volunteer_id uuid,a uuid,b uuid,form_id uuid,token text,payload jsonb,key uuid);
+insert into pal_test_context values(gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),null,null,
+ jsonb_build_object('reporter_name','Synthetic tester','reporter_email','pal-test@example.invalid','session_date',current_date,'outcome','completed','enrolled_count',20,'attended_count',15,'topic','Synthetic test','progress','on_track','summary','Synthetic test only'),gen_random_uuid());
+grant select,update on pal_test_context to authenticated,anon;
+insert into auth.users(id,email) select admin_id,'pal-test-admin@example.invalid' from pal_test_context union all select volunteer_id,'pal-test-volunteer@example.invalid' from pal_test_context;
+update public.profiles set active=true,role='super_admin' where id=(select admin_id from pal_test_context);
+update public.profiles set active=true where id=(select volunteer_id from pal_test_context);
+insert into public.cohorts(id,programme_id,name) select a,(select id from public.programmes limit 1),'Synthetic public forms A' from pal_test_context union all select b,(select id from public.programmes limit 1),'Synthetic public forms B' from pal_test_context;
+select set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'role','authenticated')::text,true) from pal_test_context;
+set local role authenticated;
+do $$ declare r jsonb; t record; begin
+ select * into t from pal_test_context;
+ r:=public.manage_public_form('create',null,t.a,'Synthetic form','',now()-interval '1 minute',now()+interval '1 day');
+ update pal_test_context set form_id=(r->>'id')::uuid,token=r->>'token';
+ if public.get_public_form(r->>'token') is not null then raise exception 'Draft exposed'; end if;
+ perform public.manage_public_form('published',(r->>'id')::uuid);
+end $$;
+reset role;
+select set_config('request.jwt.claims','{"role":"anon"}',true);
+set local role anon;
+do $$ declare t record; first_id uuid; blocked boolean; begin
+ select * into t from pal_test_context;
+ if public.get_public_form(t.token) is null then raise exception 'Published form unavailable'; end if;
+ if public.get_public_form(repeat('0',64)) is not null then raise exception 'Forged link accepted'; end if;
+ first_id:=public.submit_public_report(t.token,t.payload,t.key);
+ if public.submit_public_report(t.token,t.payload,t.key)<>first_id then raise exception 'Retry not idempotent'; end if;
+ blocked:=false;begin perform public.submit_public_report(t.token,t.payload||jsonb_build_object('cohort_id',t.b),gen_random_uuid());exception when others then blocked:=true;end;
+ if not blocked then raise exception 'Cohort injection accepted'; end if;
+ blocked:=false;begin perform public.submit_public_report(t.token,t.payload,gen_random_uuid(),'spam');exception when others then blocked:=true;end;
+ if not blocked then raise exception 'Honeypot accepted'; end if;
+ blocked:=false;begin perform public.submit_public_report(t.token,t.payload||'{"attended_count":21}',gen_random_uuid());exception when check_violation then blocked:=true;end;
+ if not blocked then raise exception 'Invalid attendance accepted'; end if;
+ for i in 1..4 loop perform public.submit_public_report(t.token,t.payload,gen_random_uuid()); end loop;
+ blocked:=false;begin perform public.submit_public_report(t.token,t.payload,gen_random_uuid());exception when raise_exception then blocked:=true;end;
+ if not blocked then raise exception 'Email limit bypassed'; end if;
+ for i in 1..5 loop perform public.submit_public_report(t.token,t.payload||jsonb_build_object('reporter_email','tester'||i||'@example.invalid'),gen_random_uuid());end loop;
+ blocked:=false;begin perform public.submit_public_report(t.token,t.payload||'{"reporter_email":"other@example.invalid"}',gen_random_uuid());exception when raise_exception then blocked:=true;end;
+ if not blocked then raise exception 'Form minute limit bypassed'; end if;
+ blocked:=false;begin perform 1 from public.public_report_submissions;exception when insufficient_privilege then blocked:=true;end;
+ if not blocked then raise exception 'Anonymous table access allowed'; end if;
+ blocked:=false;begin perform public.manage_public_form('closed',t.form_id);exception when insufficient_privilege then blocked:=true;end;
+ if not blocked then raise exception 'Anonymous management allowed'; end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims',jsonb_build_object('sub',volunteer_id,'role','authenticated')::text,true) from pal_test_context;
+set local role authenticated;
+do $$ declare t record; blocked boolean:=false;begin
+ select * into t from pal_test_context;
+ if exists(select 1 from public.public_report_submissions) or exists(select 1 from public.public_report_forms) then raise exception 'Volunteer read private public submissions';end if;
+ begin perform public.manage_public_form('closed',t.form_id);exception when insufficient_privilege then blocked:=true;end;
+ if not blocked then raise exception 'Volunteer managed form';end if;
+end $$;
+reset role;
+select set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'role','authenticated')::text,true) from pal_test_context;
+set local role authenticated;
+do $$ declare t record; r jsonb; blocked boolean:=false;begin
+ select * into t from pal_test_context;
+ if (select count(*) from public.public_report_submissions where cohort_id=t.a)<>10 or exists(select 1 from public.public_report_submissions where cohort_id=t.b) then raise exception 'Cohort isolation failed';end if;
+ perform public.manage_public_form('edit',t.form_id,null,'Synthetic form','',now()-interval '2 days',now()-interval '1 day');
+ if public.get_public_form(t.token) is not null then raise exception 'Expired form exposed';end if;
+ begin perform public.submit_public_report(t.token,t.payload,gen_random_uuid());exception when raise_exception then blocked:=true;end;
+ if not blocked then raise exception 'Expired form accepted submission';end if;
+ perform public.manage_public_form('edit',t.form_id,null,'Synthetic form','',now()+interval '1 day',now()+interval '2 days');
+ if public.get_public_form(t.token) is not null then raise exception 'Future form exposed';end if;
+ perform public.manage_public_form('edit',t.form_id,null,'Synthetic form','',now()-interval '1 day',now()+interval '1 day');
+ blocked:=false;
+ r:=public.manage_public_form('rotate',t.form_id);
+ if public.get_public_form(t.token) is not null or public.get_public_form(r->>'token') is null then raise exception 'Rotation failed';end if;
+ perform public.manage_public_form('closed',t.form_id);
+ if public.get_public_form(r->>'token') is not null then raise exception 'Closed form exposed';end if;
+ begin perform public.submit_public_report(r->>'token',t.payload,gen_random_uuid());exception when raise_exception then blocked:=true;end;
+ if not blocked then raise exception 'Closed form accepted submission';end if;
+end $$;
+reset role;
+select 'PASS: capability links, draft/closed states, cohort binding, validation, idempotency, rate limits, anonymous/volunteer/admin authorization' as result;
+rollback;
