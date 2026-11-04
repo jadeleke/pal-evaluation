@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {readSessionReport} from '../report-fields.js';
+const fields=new Map(Object.entries({date:'2026-11-04',outcome:'completed',enrolled:'20',attended:'15',topic:' Reading ',progress:'on_track',summary:' Session summary ',challenges:'',nextSteps:' More reading ',volunteers:' Team '}));
+assert.deepEqual(readSessionReport(fields),{session_date:'2026-11-04',outcome:'completed',enrolled_count:20,attended_count:15,topic:'Reading',progress:'on_track',summary:'Session summary',challenges:'',next_steps:'More reading',co_facilitators:'Team'});
+for(const [enrolled,attended] of [['20','21'],['-1','0'],['20','1.5'],['5001','0'],['','0']]){
+ const invalid=new Map(fields);invalid.set('enrolled',enrolled);invalid.set('attended',attended);assert.throws(()=>readSessionReport(invalid),/Attendance/);
+}
 const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const forms=readFileSync(new URL('../public-forms.js',import.meta.url),'utf8');

@@ -1,4 +1,5 @@
 import { mountPublicForms } from './public-forms.js';
+import { readSessionReport } from './report-fields.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 // Browser-safe publishable key. Never put a Supabase secret/service_role key here.
@@ -175,10 +176,10 @@ function showDetail(id){const r=reports.find(x=>x.id===id);if(!r)return;
   const labels=[['Session date',fmt(r.date)],['Co-facilitators',r.volunteers||'None specified'],['Attendance',r.attended+' of '+r.enrolled],['Outcome',outcomeText[r.outcome]||r.outcome],['Learning progress',progressText[r.progress]||r.progress]];
   $('dialog-content').innerHTML=`<div class="eyebrow">SESSION REPORT</div><h2 class="dialog-title">${esc(r.topic)}</h2><div class="dialog-pill">${esc(r.programme)} · ${esc(r.cohort)}</div><div class="dialog-meta">${labels.map(([k,v])=>`<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join('')}</div>${r.source==='public'?'<p>Public submission · self-reported by '+esc(r.reporter_name)+' ('+esc(r.reporter_email)+')</p>':''}<div class="dialog-label">SUMMARY</div><p class="dialog-copy">${esc(r.summary)}</p><div class="dialog-label">CHALLENGES</div><p class="dialog-copy">${esc(r.challenges||'None recorded')}</p><div class="dialog-label">NEXT STEPS</div><p class="dialog-copy">${esc(r.nextSteps||'None recorded')}</p>`;$('details-dialog').showModal();
 }
-async function submitReport(e){e.preventDefault();const f=new FormData(e.currentTarget),en=Number(f.get('enrolled')),at=Number(f.get('attended'));
-  if(!Number.isInteger(en)||!Number.isInteger(at)||en<0||at<0||at>en){message('form-alert','Attendance must be a whole number between zero and enrolment.');return}
+async function submitReport(e){e.preventDefault();const f=new FormData(e.currentTarget);let report;
+  try{report=readSessionReport(f);}catch(err){message('form-alert',err.message);return;}
   const button=e.submitter;button.disabled=true;
-  try{const payload={cohort_id:f.get('cohort'),reporter_id:user.id,session_date:f.get('date'),outcome:f.get('outcome'),enrolled_count:en,attended_count:at,topic:String(f.get('topic')).trim(),progress:f.get('progress'),summary:String(f.get('summary')).trim(),challenges:String(f.get('challenges')).trim(),next_steps:String(f.get('nextSteps')).trim(),co_facilitators:String(f.get('volunteers')).trim()};const {error}=await client.from('session_reports').insert(payload);if(error)throw error;e.target.reset();$('session-date').value=dateToday();message('form-alert','Session report submitted successfully.',true);await loadState();go('reports')}
+  try{const payload={...report,cohort_id:f.get('cohort'),reporter_id:user.id};const {error}=await client.from('session_reports').insert(payload);if(error)throw error;e.target.reset();$('session-date').value=dateToday();message('form-alert','Session report submitted successfully.',true);await loadState();go('reports')}
   catch(err){message('form-alert',`Could not submit: ${err.message||'Unexpected error'}`)}finally{button.disabled=false}
 }
 async function submitCohort(e){

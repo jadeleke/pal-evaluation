@@ -1,4 +1,5 @@
 // Cohort-specific fixed reporting templates. All authorization is enforced in PostgreSQL.
+import { readSessionReport } from './report-fields.js';
 export function mountPublicForms(client, {esc, refresh, today}) {
  const $=id=>document.getElementById(id);
  const token=new URLSearchParams(location.hash.slice(1)).get('form');
@@ -49,21 +50,39 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  async function start(){
   if(!publicMode)return;
   $('app').hidden=true;$('auth-page').hidden=true;$('password-page').hidden=true;
-  document.body.insertAdjacentHTML('beforeend','<main id="public-report-page" class="public-report-page"><div class="eyebrow">PLAY & LEARN FOUNDATION</div><h1 id="public-title">Loading reporting form…</h1><p id="public-description"></p><p id="public-context"></p><p id="public-status" role="status"></p><div id="public-report-host"></div></main>');
+  document.body.insertAdjacentHTML('beforeend','<main id="public-report-page" class="public-report-page"><div class="eyebrow">VOLUNTEER REPORTING · PLAY & LEARN FOUNDATION</div><h1 id="public-title">Loading reporting form…</h1><p id="public-description"></p><p id="public-context"></p><p id="public-status" role="status" tabindex="-1"></p><section id="public-receipt" class="panel report-form" hidden aria-labelledby="public-receipt-title"><h2 id="public-receipt-title">Session report submitted</h2><div id="public-receipt-details"></div><button type="button" id="public-another-report" class="primary-button">Submit another session report</button></section><div id="public-report-host"></div></main>');
   const {data,error}=await client.rpc('get_public_form',{p_token:token});
   if(error||!data){$('public-title').textContent='Form unavailable';$('public-status').textContent='This link may be invalid, closed, expired or not yet open. Contact your PAL coordinator for a current link.';return;}
-  $('public-title').textContent=data.title;$('public-description').textContent=data.description;$('public-context').textContent=data.programme+' / '+data.cohort;
-  const form=$('report-form').cloneNode(true);form.id='public-session-form';form.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
-  form.querySelector('[name="programme"]').closest('label').remove();form.querySelector('[name="cohort"]').closest('label').remove();
+  $('public-title').textContent='Submit a session report';$('public-description').textContent='Capture what happened, who attended, and what comes next.';$('public-context').textContent=data.title+' · '+data.programme+' / '+data.cohort;
+  const layout=$('report-form').closest('.form-layout').cloneNode(true);
+  layout.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+  const form=layout.querySelector('form');form.id='public-session-form';
+  for(const [name,value] of [['programme',data.programme],['cohort',data.cohort]]){
+   const select=form.elements[name],input=document.createElement('input');input.name=name;input.value=value;input.readOnly=true;select.replaceWith(input);
+  }
+  const guide=layout.querySelector('.tip-white ol');if(guide)guide.innerHTML='<li>Confirm the linked programme and cohort</li><li>Record attendance and outcomes</li><li>Summarise the session</li><li>Submit and review your confirmation</li>';
+  if(data.description){const instructions=document.createElement('p');instructions.className='public-instructions';instructions.textContent=data.description;form.querySelector('.form-heading').after(instructions);}
   form.querySelector('.form-alert')?.remove();
   form.querySelector('.form-grid').insertAdjacentHTML('afterbegin','<label>Your name *<input name="reporter_name" maxlength="120" autocomplete="name" required></label><label>Your email *<input name="reporter_email" type="email" maxlength="254" autocomplete="email" required></label><label class="spam-field" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>');
   form.querySelector('.form-footer > span').textContent='Your name and email are self-reported and visible only to PAL Super Admins. No child-identifying details.';
-  form.elements.date.value=today();form.elements.date.max=today();$('public-report-host').append(form);
+  form.elements.date.value=today();$('public-report-host').append(layout);
+  $('public-another-report').addEventListener('click',()=>{
+   const name=form.elements.reporter_name.value,email=form.elements.reporter_email.value;
+   form.reset();form.elements.reporter_name.value=name;form.elements.reporter_email.value=email;
+   form.elements.programme.value=data.programme;form.elements.cohort.value=data.cohort;form.elements.date.value=today();
+   submissionKey=crypto.randomUUID();$('public-receipt').hidden=true;layout.hidden=false;$('public-status').textContent='';form.querySelector('[type="submit"]').disabled=false;form.elements.date.focus();
+  });
   form.addEventListener('submit',async e=>{
-   e.preventDefault();const b=e.submitter;b.disabled=true;$('public-status').textContent='Submitting…';
+   e.preventDefault();const b=e.submitter;
    const f=new FormData(form),s=k=>String(f.get(k)||'').trim();
-   const payload={reporter_name:s('reporter_name'),reporter_email:s('reporter_email'),session_date:s('date'),outcome:s('outcome'),enrolled_count:Number(f.get('enrolled')),attended_count:Number(f.get('attended')),topic:s('topic'),progress:s('progress'),summary:s('summary'),challenges:s('challenges'),next_steps:s('nextSteps'),co_facilitators:s('volunteers')};
-   try{const {error}=await client.rpc('submit_public_report',{p_token:token,p_payload:payload,p_submission_key:submissionKey,p_website:s('website')});if(error)throw error;form.hidden=true;$('public-status').textContent='Thank you. Your report was saved for '+data.cohort+'.';}catch(err){$('public-status').textContent='Could not submit: '+err.message;b.disabled=false;}
+   let payload;try{payload={...readSessionReport(f),reporter_name:s('reporter_name'),reporter_email:s('reporter_email')};}catch(err){$('public-status').textContent=err.message;$('public-status').focus();return;}
+   b.disabled=true;$('public-status').textContent='Submitting…';
+   try{const {error}=await client.rpc('submit_public_report',{p_token:token,p_payload:payload,p_submission_key:submissionKey,p_website:s('website')});if(error)throw error;layout.hidden=true;$('public-status').textContent='Thank you. Your report was saved for '+data.cohort+'.';
+    const date=new Intl.DateTimeFormat('en-GB',{dateStyle:'medium'}).format(new Date(payload.session_date+'T12:00:00'));
+    const outcome={completed:'Completed',partial:'Partially completed',cancelled:'Cancelled'}[payload.outcome];
+    $('public-receipt-details').innerHTML='<h3>'+esc(payload.topic)+'</h3><p>'+esc(data.programme)+' · '+esc(data.cohort)+'</p><p>'+esc(date)+' · '+esc(outcome)+'</p><p>Attendance: '+payload.attended_count+' of '+payload.enrolled_count+'</p>';
+    $('public-receipt').hidden=false;$('public-status').focus();
+   }catch(err){$('public-status').textContent='Could not submit: '+err.message;b.disabled=false;$('public-status').focus();}
   });
  }
  return {publicMode,start,load,render,allRows};
