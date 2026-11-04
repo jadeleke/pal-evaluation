@@ -1,5 +1,6 @@
 // Cohort-specific fixed reporting templates. All authorization is enforced in PostgreSQL.
 import { readSessionReport } from './report-fields.js';
+export const formCohorts=(cohorts,programmeId,existingCohortId=null)=>cohorts.filter(c=>c.programme_id===programmeId&&(c.status==='active'||c.id===existingCohortId));
 export function mountPublicForms(client, {esc, refresh, today}) {
  const $=id=>document.getElementById(id);
  const token=new URLSearchParams(location.hash.slice(1)).get('form');
@@ -10,7 +11,9 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  <div class="heading-row"><div><div class="eyebrow">SUPER ADMIN</div><h1>Cohort public forms</h1><p>No volunteer account needed. Each form belongs permanently to one cohort.</p></div></div>
  <div class="panel report-form"><h2 id="public-editor-title">Create a reporting form</h2><p>Uses the PAL session report template. Do not request personal details about children.</p>
  <form id="public-form-editor" class="form-grid">
- <label>Cohort *<select name="cohort" required></select></label><label>Title *<input name="title" maxlength="120" required></label>
+ <label>Programme *<select name="programme" required></select></label><label>Cohort *<select name="cohort" required></select></label>
+ <p class="span-2" id="public-cohort-help">Choose a programme, then one independent cohort. Every form and its reports stay with that cohort.</p>
+ <label class="span-2">Title *<input name="title" maxlength="120" required></label>
  <label class="span-2">Instructions<textarea name="description" maxlength="1000"></textarea></label>
  <label>Opens at *<input name="opens" type="datetime-local" required></label><label>Closes at *<input name="closes" type="datetime-local" required></label>
  <div class="span-2"><button class="primary-button" type="submit">Save form</button> <button class="secondary-button" id="public-editor-reset" type="button">New form</button></div></form>
@@ -19,7 +22,15 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  <div id="public-forms-list" class="cohort-grid"></div></section>`);
  const editor=$('public-form-editor');
  const localDate=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
- function reset(){editing=null;editor.reset();editor.elements.cohort.disabled=false;$('public-editor-title').textContent='Create a reporting form';editor.elements.opens.value=localDate(new Date());editor.elements.closes.value=localDate(new Date(Date.now()+30*86400000));}
+ function reset(){editing=null;editor.reset();editor.elements.programme.disabled=false;editor.elements.cohort.disabled=false;updateCohortOptions();$('public-editor-title').textContent='Create a reporting form';editor.elements.opens.value=localDate(new Date());editor.elements.closes.value=localDate(new Date(Date.now()+30*86400000));}
+ function updateCohortOptions(){
+  const programme=editor.elements.programme.value,prior=editor.elements.cohort.value;
+  const matching=formCohorts(cohortList,programme,editing?forms.find(f=>f.id===editing)?.cohort_id:null);
+  editor.elements.cohort.innerHTML='<option value="">'+(programme?'Select one cohort':'Choose a programme first')+'</option>'+matching.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+  if(matching.some(c=>c.id===prior))editor.elements.cohort.value=prior;
+  $('public-cohort-help').textContent=programme&&!matching.length?'No cohorts exist for this programme yet. Create a separate cohort under Programmes & cohorts first.':'Each cohort is independent. This form, its submissions and cohort analytics belong only to the selected cohort.';
+ }
+ editor.elements.programme.addEventListener('change',updateCohortOptions);
  function note(s){$('public-admin-message').textContent=s;}
  async function manage(args){const {data,error}=await client.rpc('manage_public_form',args);if(error)throw error;if(data.token){$('public-link-panel').hidden=false;$('public-share-link').value=location.origin+'/#form='+data.token;}return data;}
  editor.addEventListener('submit',async e=>{
@@ -32,7 +43,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
   const b=e.target.closest('[data-form-action]');if(!b)return;const f=forms.find(f=>f.id===b.dataset.id);if(!f)return;
   const action=b.dataset.formAction;
   if(action==='edit'||action==='duplicate'){
-   editing=action==='edit'?f.id:null;editor.elements.cohort.value=f.cohort_id;editor.elements.cohort.disabled=!!editing;
+   editing=action==='edit'?f.id:null;editor.elements.programme.value=cohortList.find(c=>c.id===f.cohort_id)?.programme_id||'';editor.elements.programme.disabled=!!editing;updateCohortOptions();editor.elements.cohort.value=f.cohort_id;editor.elements.cohort.disabled=!!editing;
    editor.elements.title.value=f.title+(editing?'':' (copy)');editor.elements.description.value=f.description;
    editor.elements.opens.value=localDate(new Date(f.opens_at));editor.elements.closes.value=localDate(new Date(f.closes_at));
    $('public-editor-title').textContent=editing?'Edit reporting form':'Duplicate reporting form';editor.scrollIntoView({behavior:'smooth'});return;
@@ -42,9 +53,9 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  reset();
  async function allRows(table,columns){let rows=[];for(let offset=0;;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw error;rows.push(...data);if(data.length<500)return rows;}}
  async function load(){forms=await allRows('public_report_forms','id,cohort_id,title,description,status,opens_at,closes_at');return allRows('public_report_submissions','id,cohort_id,form_id,reporter_name,reporter_email,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators');}
- function render(cohorts){
-  cohortList=cohorts;const prior=editor.elements.cohort.value;
-  editor.elements.cohort.innerHTML='<option value="">Select one cohort</option>'+cohorts.map(c=>`<option value="${esc(c.id)}">${esc(c.programme)} / ${esc(c.name)}</option>`).join('');editor.elements.cohort.value=prior;
+ function render(cohorts,programmes){
+  cohortList=cohorts;const prior=editor.elements.programme.value;
+  editor.elements.programme.innerHTML='<option value="">Select one programme</option>'+programmes.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');editor.elements.programme.value=prior;updateCohortOptions();
   $('public-forms-list').innerHTML=forms.map(f=>`<div class="cohort-card"><span class="badge-neutral">${esc(f.status)}</span><h3>${esc(f.title)}</h3><p>${esc(cohortList.find(c=>c.id===f.cohort_id)?.name)}</p><p>${esc(new Date(f.opens_at).toLocaleString())} – ${esc(new Date(f.closes_at).toLocaleString())}</p><div class="form-actions">${[['edit','Edit'],['duplicate','Duplicate'],['published','Publish'],['closed','Close'],['rotate','Replace link']].map(([a,label])=>`<button type="button" class="secondary-button" data-form-action="${a}" data-id="${esc(f.id)}">${label}</button>`).join('')}</div></div>`).join('')||'<p>No public forms yet.</p>';
  }
  async function start(){

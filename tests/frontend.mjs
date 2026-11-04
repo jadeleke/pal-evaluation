@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {readSessionReport} from '../report-fields.js';
+import {formCohorts} from '../public-forms.js';
+const independentCohorts=[{id:'tech-jan',programme_id:'tech',status:'active'},{id:'girls-jan',programme_id:'girls',status:'active'},{id:'tech-future',programme_id:'tech',status:'active'},{id:'tech-old',programme_id:'tech',status:'completed'}];
+assert.deepEqual(formCohorts(independentCohorts,'tech').map(c=>c.id),['tech-jan','tech-future']);
+assert.deepEqual(formCohorts(independentCohorts,'girls').map(c=>c.id),['girls-jan']);
+assert.deepEqual(formCohorts(independentCohorts,'library'),[]);
+assert.deepEqual(formCohorts(independentCohorts,'tech','tech-old').map(c=>c.id),['tech-jan','tech-future','tech-old']);
 const fields=new Map(Object.entries({date:'2026-11-04',outcome:'completed',enrolled:'20',attended:'15',topic:' Reading ',progress:'on_track',summary:' Session summary ',challenges:'',nextSteps:' More reading ',volunteers:' Team '}));
 assert.deepEqual(readSessionReport(fields),{session_date:'2026-11-04',outcome:'completed',enrolled_count:20,attended_count:15,topic:'Reading',progress:'on_track',summary:'Session summary',challenges:'',next_steps:'More reading',co_facilitators:'Team'});
 for(const [enrolled,attended] of [['20','21'],['-1','0'],['20','1.5'],['5001','0'],['','0']]){
