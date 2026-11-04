@@ -16,13 +16,13 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  <label class="span-2">Title *<input name="title" maxlength="120" required></label>
  <label class="span-2">Instructions<textarea name="description" maxlength="1000"></textarea></label>
  <label>Opens at *<input name="opens" type="datetime-local" required></label><label>Closes at *<input name="closes" type="datetime-local" required></label>
- <div class="span-2"><button class="primary-button" type="submit">Save form</button> <button class="secondary-button" id="public-editor-reset" type="button">New form</button></div></form>
+ <div class="span-2"><button class="primary-button" type="submit" id="public-create-publish" value="publish">Create &amp; publish form</button> <button class="secondary-button" type="submit" id="public-save-draft" value="draft">Save draft</button> <button class="secondary-button" id="public-editor-reset" type="button">New form</button></div></form>
  <p id="public-admin-message" role="status"></p>
  <div id="public-link-panel" hidden><label>New share link — copy and keep it now<input id="public-share-link" readonly></label><button type="button" id="public-copy-link" class="secondary-button">Copy link</button><p>Only the link hash is stored. Rotate the link to generate a replacement. Rotation immediately disables the old link.</p></div></div>
  <div id="public-forms-list" class="cohort-grid"></div></section>`);
  const editor=$('public-form-editor');
  const localDate=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
- function reset(){editing=null;editor.reset();editor.elements.programme.disabled=false;editor.elements.cohort.disabled=false;updateCohortOptions();$('public-editor-title').textContent='Create a reporting form';editor.elements.opens.value=localDate(new Date());editor.elements.closes.value=localDate(new Date(Date.now()+30*86400000));}
+ function reset(){editing=null;editor.reset();editor.elements.programme.disabled=false;editor.elements.cohort.disabled=false;updateCohortOptions();$('public-editor-title').textContent='Create a reporting form';$('public-create-publish').textContent='Create & publish form';$('public-save-draft').hidden=false;editor.elements.opens.value=localDate(new Date());editor.elements.closes.value=localDate(new Date(Date.now()+30*86400000));}
  function updateCohortOptions(){
   const programme=editor.elements.programme.value,prior=editor.elements.cohort.value;
   const matching=formCohorts(cohortList,programme,editing?forms.find(f=>f.id===editing)?.cohort_id:null);
@@ -34,8 +34,13 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  function note(s){$('public-admin-message').textContent=s;}
  async function manage(args){const {data,error}=await client.rpc('manage_public_form',args);if(error)throw error;if(data.token){$('public-link-panel').hidden=false;$('public-share-link').value=location.origin+'/#form='+data.token;}return data;}
  editor.addEventListener('submit',async e=>{
-  e.preventDefault();const b=e.submitter;b.disabled=true;note('');
-  try{const f=editor.elements;await manage({p_action:editing?'edit':'create',p_id:editing,p_cohort_id:f.cohort.value,p_title:f.title.value.trim(),p_description:f.description.value,p_opens_at:new Date(f.opens.value).toISOString(),p_closes_at:new Date(f.closes.value).toISOString()});note(editing?'Form updated.':'Draft created. Copy the link, then publish the form below.');reset();await refresh();}catch(err){note(err.message);}finally{b.disabled=false;}
+  e.preventDefault();const b=e.submitter||$('public-create-publish');const buttons=editor.querySelectorAll('button');buttons.forEach(button=>button.disabled=true);note('');let createdId=null;
+  try{const f=editor.elements,wasEditing=!!editing,publish=!wasEditing&&b.value==='publish';
+   const result=await manage({p_action:wasEditing?'edit':'create',p_id:editing,p_cohort_id:f.cohort.value,p_title:f.title.value.trim(),p_description:f.description.value,p_opens_at:new Date(f.opens.value).toISOString(),p_closes_at:new Date(f.closes.value).toISOString()});
+   if(!wasEditing)createdId=result.id;
+   if(publish)await manage({p_action:'published',p_id:result.id});
+   note(wasEditing?'Form updated.':publish?'Form published. Copy and share the link. It accepts reports during the opening and closing dates.':'Draft saved. This link will not accept reports until you select Publish on its card below.');reset();await refresh();
+  }catch(err){note((createdId?'Draft saved, but publishing did not complete. Use Publish on its card below. ':'')+err.message);if(createdId){reset();await refresh();}}finally{buttons.forEach(button=>button.disabled=false);}
  });
  $('public-editor-reset').addEventListener('click',reset);
  $('public-copy-link').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('public-share-link').value);note('Link copied.');}catch{note('Select the link and copy it manually.');}});
@@ -46,7 +51,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
    editing=action==='edit'?f.id:null;editor.elements.programme.value=cohortList.find(c=>c.id===f.cohort_id)?.programme_id||'';editor.elements.programme.disabled=!!editing;updateCohortOptions();editor.elements.cohort.value=f.cohort_id;editor.elements.cohort.disabled=!!editing;
    editor.elements.title.value=f.title+(editing?'':' (copy)');editor.elements.description.value=f.description;
    editor.elements.opens.value=localDate(new Date(f.opens_at));editor.elements.closes.value=localDate(new Date(f.closes_at));
-   $('public-editor-title').textContent=editing?'Edit reporting form':'Duplicate reporting form';editor.scrollIntoView({behavior:'smooth'});return;
+   $('public-editor-title').textContent=editing?'Edit reporting form':'Duplicate reporting form';$('public-create-publish').textContent=editing?'Save changes':'Create & publish form';$('public-save-draft').hidden=!!editing;editor.scrollIntoView({behavior:'smooth'});return;
   }
   b.disabled=true;try{await manage({p_action:action,p_id:f.id});note(action==='rotate'?'New link generated. The old link is disabled.':'Form status updated.');await refresh();}catch(err){note(err.message);}finally{b.disabled=false;}
  });
