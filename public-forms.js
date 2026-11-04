@@ -5,7 +5,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  const token=new URLSearchParams(location.hash.slice(1)).get('form');
  const publicMode=token!==null;
  let forms=[], cohortList=[], editing=null, submissionKey=crypto.randomUUID();
- document.querySelector('#nav').insertAdjacentHTML('beforeend','<button type="button" class="nav-link" data-page="forms" data-admin hidden>▤ Public forms</button>');
+ document.querySelector('#nav').insertAdjacentHTML('afterbegin','<button type="button" class="nav-link" data-page="forms" data-admin hidden><span class="nav-icon" aria-hidden="true">▤</span> Public forms</button>');
  document.querySelector('.content').insertAdjacentHTML('beforeend',`<section id="page-forms" class="page">
  <div class="heading-row"><div><div class="eyebrow">SUPER ADMIN</div><h1>Cohort public forms</h1><p>No volunteer account needed. Each form belongs permanently to one cohort.</p></div></div>
  <div class="panel report-form"><h2 id="public-editor-title">Create a reporting form</h2><p>Uses the PAL session report template. Do not request personal details about children.</p>
