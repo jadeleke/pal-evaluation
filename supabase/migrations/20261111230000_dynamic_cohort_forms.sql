@@ -59,7 +59,7 @@ create policy dynamic_submissions_admin_read on public.dynamic_form_submissions 
 create function private.validate_dynamic_schema(p_schema jsonb) returns void
 language plpgsql set search_path='' as $$
 declare s jsonb; q jsonb; o jsonb; sid text; qid text; typ text; ref text;
- seen text[]:='{}'; conditional text[]:='{}'; option_values text[]; cnt int:=0; sections_count int:=0;
+ seen text[]:='{}'; conditional text[]:='{}'; choices jsonb:='{}'::jsonb; option_values text[]; cnt int:=0; sections_count int:=0;
 begin
  if p_schema is null or jsonb_typeof(p_schema)<>'object'
    or jsonb_typeof(p_schema->'sections')<>'array'
@@ -74,8 +74,10 @@ begin
    or jsonb_typeof(s->'questions')<>'array' then raise exception 'Invalid section'; end if;
   if s ? 'when' and s->'when' <> 'null'::jsonb then
    ref:=s->'when'->>'questionId';
-   if ref is null or not(ref=any(conditional)) or length(coalesce(s->'when'->>'value',''))>160
-   then raise exception 'Section conditions must reference an earlier choice question'; end if;
+   if ref is null or not(ref=any(conditional)) or not exists (
+     select 1 from jsonb_array_elements_text(choices->ref) candidate
+     where candidate.value=s->'when'->>'value')
+   then raise exception 'Section conditions must match an earlier choice option'; end if;
   end if;
   for q in select value from jsonb_array_elements(s->'questions') loop
    cnt:=cnt+1; if cnt>150 then raise exception 'Maximum 150 questions'; end if;
@@ -88,8 +90,10 @@ begin
    then raise exception 'Invalid or duplicate question'; end if;
    if q ? 'when' and q->'when' <> 'null'::jsonb then
     ref:=q->'when'->>'questionId';
-    if ref is null or not(ref=any(conditional)) or length(coalesce(q->'when'->>'value',''))>160
-    then raise exception 'Question conditions must reference an earlier choice question'; end if;
+    if ref is null or not(ref=any(conditional)) or not exists (
+      select 1 from jsonb_array_elements_text(choices->ref) candidate
+      where candidate.value=q->'when'->>'value')
+    then raise exception 'Question conditions must match an earlier choice option'; end if;
    end if;
    if typ in ('select','radio','checkbox') then
     if jsonb_typeof(q->'options')<>'array' or jsonb_array_length(q->'options') not between 1 and 30 then
@@ -107,7 +111,11 @@ begin
      or (q->>'max')::integer-(q->>'min')::integer>20) then
        raise exception 'Scales require a valid minimum and maximum (range <=20)'; end if;
    seen:=array_append(seen,qid);
-   if typ in ('select','radio','yesno') then conditional:=array_append(conditional,qid); end if;
+   if typ in ('select','radio','yesno') and not(q ? 'when') then
+     conditional:=array_append(conditional,qid);
+     choices:=jsonb_set(choices,array[qid],case when typ='yesno'
+       then '["Yes","No"]'::jsonb else q->'options' end);
+   end if;
   end loop;
  end loop;
  if cnt=0 then raise exception 'Add at least one question before publishing'; end if;
