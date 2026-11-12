@@ -127,6 +127,8 @@ begin
       (q ? 'max' and coalesce(q->>'max','')!~'^-?[0-9]{1,10}(\.[0-9]{1,2})?$') or
       (q ? 'min' and q ? 'max' and (q->>'min')::numeric>(q->>'max')::numeric))
    then raise exception 'Invalid numeric limits'; end if;
+   if typ='currency' and coalesce(q->>'currencyCode','') not in ('GHS','USD','EUR','GBP')
+     then raise exception 'Choose a supported currency'; end if;
    if typ='date' and
      ((q ? 'minDate' and coalesce(q->>'minDate','')!~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') or
       (q ? 'maxDate' and coalesce(q->>'maxDate','')!~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') or
@@ -191,6 +193,7 @@ begin
     closes_at=coalesce(p_closes_at,closes_at),updated_at=now()
     where id=f.id returning * into f;
   elsif p_action='publish' then
+   if f.status='archived' then raise exception 'Archived form cannot be published'; end if;
    perform private.validate_dynamic_schema(f.draft_schema);
    if f.published_version_id is null or not exists (
      select 1 from public.dynamic_form_versions v
@@ -205,10 +208,12 @@ begin
    end if;
    update public.dynamic_forms set status='published',updated_at=now() where id=f.id returning * into f;
   elsif p_action in ('close','archive','draft') then
+   if f.status='archived' then raise exception 'Archived form cannot be changed'; end if;
    update public.dynamic_forms set status=case when p_action='close' then 'closed'
      when p_action='archive' then 'archived' else 'draft' end,updated_at=now()
      where id=f.id returning * into f;
   elsif p_action='rotate' then
+   if f.status='archived' then raise exception 'Archived form cannot be changed'; end if;
    secret:=encode(extensions.gen_random_bytes(32),'hex');
    update public.dynamic_forms set token_hash=encode(extensions.digest(secret,'sha256'),'hex'),
      updated_at=now() where id=f.id returning * into f;
@@ -346,7 +351,6 @@ revoke all on function private.validate_dynamic_schema(jsonb),
  private.get_dynamic_form(text),public.get_dynamic_form(text),
  private.submit_dynamic_form(text,uuid,jsonb,uuid,text),
  public.submit_dynamic_form(text,uuid,jsonb,uuid,text) from public,anon,authenticated;
-grant execute on function private.validate_dynamic_schema(jsonb) to authenticated;
 grant execute on function private.manage_dynamic_form(text,uuid,uuid,text,text,jsonb,timestamptz,timestamptz),
  public.manage_dynamic_form(text,uuid,uuid,text,text,jsonb,timestamptz,timestamptz) to authenticated;
 grant execute on function private.get_dynamic_form(text),public.get_dynamic_form(text),
