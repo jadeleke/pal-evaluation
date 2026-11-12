@@ -98,3 +98,56 @@ Checks: `node --check app.js`, `node --check public-forms.js`,
 to exercise synthetic Auth identities, role permissions, cohort binding, link
 rotation, publication windows, validation, retries and rate limits. It rolls back
 all fixtures. This does not test invitation delivery or real browser sign-in.
+
+
+## Dynamic cohort forms (feature branch; not released)
+
+This feature is introduced in draft PR #1 and is **not live** until the new
+database migration is reviewed/applied and the canonical production site is
+deployed. The older **Public forms** and authenticated session reporting
+continue to use their original tables and endpoints.
+
+### First form — Super Admin
+
+1. Sign in as an active Super Admin and navigate to **Form builder**.
+2. Select a blank form or reusable template, then **Create form**.
+3. Choose an existing active programme/cohort. Assignment is permanent
+   after the form is saved. Other cohorts can receive a duplicated template.
+4. Edit the title, description, sections, question types and options. Add
+   required flags, constraints and simple conditional rules.
+5. **Preview**, then **Save draft changes** and **Publish version**.
+6. Select **Copy link** from the form card in the same session that creates
+   or replaces the link, and share it. For subsequent sessions use
+   **Replace link** to generate another link; this revokes the previous one.
+7. View responses through **Responses & analytics**, filter by cohort/version
+   and date, and export a CSV.
+
+Dynamic public links use URL fragments of the form `/#dynamic=<token>`.
+A hashed capability token is stored in the database rather than the token
+itself. Only published, active links accept responses; the server derives
+the cohort from the form record. Anonymous users cannot query private
+form or submission tables.
+
+### Release and verification
+
+- The additive schema is `supabase/migrations/20261111230000_dynamic_cohort_forms.sql`.
+  Review and execute against a staging clone before production.
+- Run static tests with `node --check app.js`,
+  `node --check dynamic-forms.js`, `node tests/frontend.mjs` and
+  `node tests/dynamic-forms.mjs`.
+- After applying the migration to a safe test database, run the synthetic
+  role/isolation/versioning test `supabase/tests/dynamic_forms.sql`
+  as its database owner. The fixture uses a transaction and rolls back.
+- Test real Super Admin login, volunteer access controls, public forms,
+  expiry and link replacement, invalid submissions, conditional fields,
+  versioning, analytics and mobile responsiveness.
+- Check Supabase security advisors and review grants before releasing.
+- Merge to `main` only after checks pass, then verify the **pal-evaluation**
+  project deployment at `https://pal-evaluation.vercel.app/`.
+  Never deploy to `pal-evaluation-gh`.
+
+Current limitations: the dynamic form dashboard offers per-form numerical
+and choice summaries rather than a complete chart-based organization-wide
+analytics workspace. Completion rates cannot be calculated without a
+reliable form-start event. No identifying details about children should be
+included in form submissions.
