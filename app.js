@@ -1,4 +1,5 @@
 import { mountPublicForms } from './public-forms.js';
+import { mountDynamicForms } from './dynamic-forms.js';
 import { readSessionReport } from './report-fields.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
@@ -50,10 +51,10 @@ function showPasswordSetup(){
 }
 
 function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!value)return;el.textContent=value;el.classList.toggle('success',success)}
-function go(page){if(['analytics','team','forms'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
+function go(page){if(['analytics','team','forms','dynamic-forms'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
 async function loadState(){
-  if(publicForms.publicMode)return;
+  if(publicForms.publicMode||dynamicForms.publicMode)return;
   if(loading){refreshQueued=true;return;}loading=true;
   try {
     const {data:{user:found},error:authError}=await client.auth.getUser();
@@ -76,6 +77,7 @@ async function loadState(){
     programmes=result[0].data||[];
     cohorts=(result[1].data||[]).map(c=>({...c,programme:c.programmes?.name||'Unknown'}));
     const publicReports=admin?await publicForms.load():[];
+     if(admin)await dynamicForms.load();
     reports=[...(result[2].data||[]),...publicReports.map(r=>({...r,source:'public',cohorts:{name:cohorts.find(c=>c.id===r.cohort_id)?.name,programmes:{name:cohorts.find(c=>c.id===r.cohort_id)?.programme}}}))].map(r=>({...r,programme:r.cohorts?.programmes?.name||'Unknown',cohort:r.cohorts?.name||'Unknown',date:r.session_date,attended:r.attended_count,enrolled:r.enrolled_count,volunteers:r.co_facilitators,nextSteps:r.next_steps}));
     reports.sort((a,b)=>b.date.localeCompare(a.date));
     people=admin?result[3].data||[]:[];
@@ -171,7 +173,7 @@ function exportAnalytics(){const data=filteredAnalytics(),fields=['programme','c
 function renderPeople(){if(profile?.role!=='super_admin')return;
   $('people-list').innerHTML=people.length?people.map(p=>`<div class="person-row"><div><strong>${esc(p.full_name||p.email)}</strong><small>${esc(p.email)} · ${esc(p.role.replace('_',' '))}</small></div><select data-membership="${esc(p.id)}" aria-label="Assign cohort"><option value="">${memberships.some(m=>m.user_id===p.id)?'Add another cohort':'Assign a cohort'}</option>${cohorts.map(c=>`<option value="${esc(c.id)}">${esc(c.programme)} / ${esc(c.name)}</option>`).join('')}</select><button class="secondary-button" data-toggle="${esc(p.id)}" ${p.id===user.id?'disabled':''}>${p.active?'Deactivate':'Activate'}</button></div>`).join(''):'<div class="empty-wide">No members have been invited.</div>';
 }
-function render(){if(profile?.role==='super_admin')publicForms.render(cohorts,programmes);renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople();renderAccount()}
+function render(){if(profile?.role==='super_admin'){publicForms.render(cohorts,programmes);dynamicForms.render(cohorts,programmes);}renderDashboard();renderReports();renderCohorts();renderSelectors();renderAnalytics();renderPeople();renderAccount()}
 function showDetail(id){const r=reports.find(x=>x.id===id);if(!r)return;
   const labels=[['Session date',fmt(r.date)],['Co-facilitators',r.volunteers||'None specified'],['Attendance',r.attended+' of '+r.enrolled],['Outcome',outcomeText[r.outcome]||r.outcome],['Learning progress',progressText[r.progress]||r.progress]];
   $('dialog-content').innerHTML=`<div class="eyebrow">SESSION REPORT</div><h2 class="dialog-title">${esc(r.topic)}</h2><div class="dialog-pill">${esc(r.programme)} · ${esc(r.cohort)}</div><div class="dialog-meta">${labels.map(([k,v])=>`<div><strong>${esc(k)}:</strong> ${esc(v)}</div>`).join('')}</div>${r.source==='public'?'<p>Public submission · self-reported by '+esc(r.reporter_name)+' ('+esc(r.reporter_email)+')</p>':''}<div class="dialog-label">SUMMARY</div><p class="dialog-copy">${esc(r.summary)}</p><div class="dialog-label">CHALLENGES</div><p class="dialog-copy">${esc(r.challenges||'None recorded')}</p><div class="dialog-label">NEXT STEPS</div><p class="dialog-copy">${esc(r.nextSteps||'None recorded')}</p>`;$('details-dialog').showModal();
@@ -316,6 +318,7 @@ async function updateMember(event){const target=event.target,uid=target.dataset.
   if(target.dataset.membership&&target.value){const {error}=await client.from('cohort_members').insert({user_id:target.dataset.membership,cohort_id:target.value});if(error){alert(error.code==='23505'?'Already assigned to this cohort.':error.message);return}await loadState();go('team')}
 }
 const publicForms=mountPublicForms(client,{esc,refresh:loadState,today:dateToday});
+const dynamicForms=mountDynamicForms(client,{esc,refresh:loadState});
 
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
@@ -348,5 +351,5 @@ $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
 $('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
 $('session-date').value=dateToday();
-client.auth.onAuthStateChange((event)=>{if(publicForms.publicMode)return;if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});
-if(publicForms.publicMode)publicForms.start();else loadState();
+client.auth.onAuthStateChange((event)=>{if(publicForms.publicMode||dynamicForms.publicMode)return;if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});
+if(publicForms.publicMode)publicForms.start();else if(dynamicForms.publicMode)dynamicForms.start();else loadState();
