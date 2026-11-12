@@ -10,7 +10,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  document.querySelector('#nav').insertAdjacentHTML('afterbegin','<button type="button" class="nav-link" data-page="forms" data-admin hidden><span class="nav-icon" aria-hidden="true">▤</span> Public forms</button>');
  document.querySelector('.content').insertAdjacentHTML('beforeend',`<section id="page-forms" class="page">
  <div class="heading-row"><div><div class="eyebrow">SUPER ADMIN</div><h1>Cohort public forms</h1><p>No volunteer account needed. Each form belongs permanently to one cohort.</p></div></div>
- <div class="panel report-form"><h2 id="public-editor-title">Create a reporting form</h2><p>Uses the PAL session report template. Do not request personal details about children.</p>
+ <details class="panel legacy-form-panel" id="legacy-form-panel"><summary>Session-report forms</summary><div class="report-form"><h2 id="public-editor-title">Create a reporting form</h2><p>Uses the PAL session report template. Do not request personal details about children.</p>
  <form id="public-form-editor" class="form-grid">
  <label>Programme *<select name="programme" required></select></label><label>Cohort *<select name="cohort" required></select></label>
  <p class="span-2" id="public-cohort-help">Choose a programme, then one independent cohort. Every form and its reports stay with that cohort.</p>
@@ -20,7 +20,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  <div class="span-2"><button class="primary-button" type="submit" id="public-create-publish" value="publish">Create &amp; publish form</button> <button class="secondary-button" type="submit" id="public-save-draft" value="draft">Save draft</button> <button class="secondary-button" id="public-editor-reset" type="button">New form</button></div></form>
  <p id="public-admin-message" role="status"></p>
  <div id="public-link-panel" hidden><label>New share link — copy and keep it now<input id="public-share-link" readonly></label><button type="button" id="public-copy-link" class="secondary-button">Copy link</button><p>Only the link hash is stored. Rotate the link to generate a replacement. Rotation immediately disables the old link.</p></div></div>
- <div id="public-forms-list" class="cohort-grid"></div></section>`);
+ <div id="public-forms-list" class="cohort-grid"></div></details></section>`);
  const dynamicForms=mountDynamicForms(client,{esc});
  const editor=$('public-form-editor');
  const localDate=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);

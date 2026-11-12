@@ -50,7 +50,7 @@ function showPasswordSetup(){
 }
 
 function message(id,value,success=false){const el=$(id);el.hidden=!value;if(!value)return;el.textContent=value;el.classList.toggle('success',success)}
-function go(page){if(['analytics','team','forms'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;$('sidebar').classList.remove('mobile-open');render();window.scrollTo({top:0,behavior:'smooth'});}
+function go(page){if(['analytics','team','forms'].includes(page)&&profile?.role!=='super_admin')return;activePage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+page));document.querySelectorAll('.nav-link').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('page-breadcrumb').textContent=({dashboard:'Overview','new-report':'Submit report',reports:'Report history',cohorts:'Programmes & cohorts',analytics:'Evaluation & analytics',team:'Manage volunteers',account:'Account settings'})[page]||page;setMobileMenu(false);render();window.scrollTo({top:0,behavior:'smooth'});}
 function setVisibility(showApp=false){$('app').hidden=!showApp;$('auth-page').hidden=showApp;$('password-page').hidden=true;}
 async function loadState(){
   if(publicForms.publicMode)return;
@@ -85,7 +85,7 @@ async function loadState(){
   finally{loading=false;if(refreshQueued){refreshQueued=false;setTimeout(()=>loadState(),0);}}
 }
 function renderDashboard(){
-  const activeCohorts=cohorts.filter(c=>c.status==='active').length;
+  const activeCohorts=cohorts.filter(c=>c.status==='active'&&programmes.some(p=>p.id===c.programme_id&&p.active)).length;
   const attended=reports.reduce((v,r)=>v+Number(r.attended||0),0);
   const stats=[['Active programmes',programmes.filter(p=>p.active).length,'Current initiatives','◈',''],['Active cohorts',activeCohorts,'Learning groups','♧','orange'],['Reports submitted',reports.length,'Submitted session reports','▤','blue'],['Session attendances',attended,'Aggregate attendance','✦','violet']];
   $('stats-grid').innerHTML=stats.map(([k,v,f,icon,color])=>`<div class="stat-card"><div class="stat-top"><span>${k}</span><span class="stat-icon ${color}">${icon}</span></div><div class="stat-value">${v}</div><div class="stat-footer">${f}</div></div>`).join('');
@@ -102,11 +102,11 @@ function renderCohorts(){
  const admin=profile?.role==='super_admin';
  $('programme-list').innerHTML=admin?programmes.map(programme=>{
   const count=cohorts.filter(cohort=>cohort.programme_id===programme.id).length;
-  return `<div class="cohort-info"><span><strong>${esc(programme.name)}</strong> · ${count} ${count===1?'cohort':'cohorts'}</span><button type="button" class="secondary-button" data-delete-programme="${esc(programme.id)}" aria-label="Delete programme ${esc(programme.name)}">Delete</button></div>`;
+  return `<div class="cohort-info"><span><strong>${esc(programme.name)}</strong>${programme.active?"":" · Inactive"} · ${count} ${count===1?'cohort':'cohorts'}</span><div class="record-actions"><button type="button" class="secondary-button" data-change-programme="${esc(programme.id)}">${programme.active?'Deactivate':'Reactivate'}</button><button type="button" class="secondary-button" data-delete-programme="${esc(programme.id)}" aria-label="Delete programme ${esc(programme.name)}">Delete</button></div></div>`;
  }).join(''):'';
  $('cohort-grid').innerHTML=cohorts.length?cohorts.map(c=>{
  const related=reports.filter(r=>r.cohort_id===c.id),assigned=memberships.filter(m=>m.cohort_id===c.id).map(m=>personName(m.user_id));
- const remove=admin?`<button type="button" class="secondary-button" data-delete-cohort="${esc(c.id)}" aria-label="Delete cohort ${esc(c.name)}">Delete cohort</button>`:'';
+ const remove=admin?`<div class="record-actions">${c.status==='completed'?'':`<button type="button" class="secondary-button" data-change-cohort="${esc(c.id)}">${c.status==='active'?'Pause cohort':'Resume cohort'}</button>`}<button type="button" class="secondary-button" data-delete-cohort="${esc(c.id)}" aria-label="Delete cohort ${esc(c.name)}">Delete cohort</button></div>`:'';
  return '<div class="cohort-card"><div class="cohort-top"><div class="programme-icon '+slug(c.programme)+'">'+emoji(c.programme)+'</div><span class="cohort-type">'+esc(c.status)+'</span></div><h3>'+esc(c.name)+'</h3><p>'+esc(c.programme)+'</p><div class="cohort-info"><span>Schedule</span><strong>'+fmt(c.start_date)+' – '+fmt(c.end_date)+'</strong></div><div class="cohort-info"><span>Leader</span><strong>'+esc(c.leader_id?personName(c.leader_id):'Not assigned')+'</strong></div><div class="cohort-info"><span>Team</span><strong>'+esc(admin?(assigned.join(', ')||'Not assigned'):'Assigned cohort')+'</strong></div><div class="cohort-info"><span>Reports</span><strong>'+related.length+'</strong></div>'+remove+'</div>'
  }).join(''):'<div class="empty-wide">No cohorts available yet. Create your first cohort.</div>';
 }
@@ -238,7 +238,7 @@ async function deleteProgrammeOrCohort(event){
  const record=(isProgramme?programmes:cohorts).find(item=>item.id===id);
  if(!record)return;
  const alertId='programme-cohort-alert';
- const blocked=isProgramme?'This programme still contains cohorts.':'This cohort has linked reports or forms.';
+ const blocked=isProgramme?'This programme still contains cohorts. Choose Deactivate to keep its history and stop new reporting.':(record.status==='completed'?'This completed cohort has linked reports or forms.':'This cohort has linked reports or forms. Choose Pause cohort to keep its history and stop new reporting.');
  if(isProgramme?cohorts.some(item=>item.programme_id===id):reports.some(report=>report.cohort_id===id)){
   message(alertId,blocked);
   return;
@@ -256,6 +256,34 @@ async function deleteProgrammeOrCohort(event){
   message(alertId,error.code==='23503'?blocked:`Could not delete ${kind}. ${error.message}`);
  }finally{button.disabled=false;}
 }
+async function changeProgrammeOrCohortStatus(event){
+ if(profile?.role!=='super_admin')return;
+ const button=event.target.closest('[data-change-programme],[data-change-cohort]');
+ if(!button)return;
+ const isProgramme=button.hasAttribute('data-change-programme');
+ const id=button.dataset.changeProgramme||button.dataset.changeCohort;
+ const record=(isProgramme?programmes:cohorts).find(item=>item.id===id);
+ if(!record)return;
+ const enable=isProgramme?!record.active:record.status==='paused';
+ if(!isProgramme&&enable&&!programmes.some(p=>p.id===record.programme_id&&p.active)){
+  message('programme-cohort-alert','Reactivate the programme before resuming this cohort.');
+  return;
+ }
+ if(!enable&&!confirm(`Stop new reports and public form submissions for “${record.name}”? Existing records will stay available.`))return;
+ const changes=isProgramme?{active:enable}:{status:enable?'active':'paused'};
+ button.disabled=true;
+ try{
+  const {data,error}=await client.from(isProgramme?'programmes':'cohorts').update(changes).eq('id',id).select('id').maybeSingle();
+  if(error)throw error;
+  if(!data)throw new Error('The record is unavailable or you no longer have permission.');
+  await loadState();
+  const status=isProgramme?(enable?'reactivated':'deactivated'):(enable?'resumed':'paused');
+  message('programme-cohort-alert',`“${record.name}” ${status}.`,true);
+ }catch(error){
+  message('programme-cohort-alert',error.message);
+ }finally{button.disabled=false;}
+}
+
 function downloadCSV(){const fields=['id','programme','cohort','date','outcome','enrolled','attended','topic','progress','summary','challenges','nextSteps'],rows=[fields,...reports.map(r=>fields.map(k=>r[k]??''))],csv=rows.map(row=>row.map(v=>'"'+String(v).replace(/^[=+\-@\t\r]/,"'$&").replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='pal-evaluation-reports.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function invite(e){e.preventDefault();const f=new FormData(e.target);message('invite-alert','');
   const {data,error}=await client.functions.invoke('invite-volunteer',{body:{email:String(f.get('email')).trim().toLowerCase(),full_name:String(f.get('name')).trim(),cohort_id:f.get('cohort_id')||null}});
@@ -388,6 +416,7 @@ $('add-programme-button').addEventListener('click',()=>{
  if(!form.hidden)form.elements.name.focus();
 });
 $('page-cohorts').addEventListener('click',deleteProgrammeOrCohort);
+$('page-cohorts').addEventListener('click',changeProgrammeOrCohortStatus);
 $('programme-select').addEventListener('change',updateCohortSelect);
 $('report-search').addEventListener('input',renderReports);
 $('report-filter').addEventListener('change',renderReports);
@@ -412,7 +441,24 @@ $('account-reset-password').addEventListener('click',sendMyPasswordReset);
 $('forgot-button').addEventListener('click',forgot);
 $('initial-admin-link').addEventListener('click',firstAdminLink);
 $('dialog-close').addEventListener('click',()=>$('details-dialog').close());
-$('menu-button').addEventListener('click',()=>$('sidebar').classList.toggle('mobile-open'));
+const mobileLayout=matchMedia('(max-width: 760px)');
+function setMobileMenu(open,restoreFocus=false){
+ const visible=mobileLayout.matches&&open;
+ $('sidebar').classList.toggle('mobile-open',visible);
+ $('sidebar').inert=mobileLayout.matches&&!visible;
+ $('menu-backdrop').hidden=!visible;
+ $('menu-button').setAttribute('aria-expanded',String(visible));
+ if(visible)$('nav').querySelector('.nav-link.active')?.focus();
+ else if(restoreFocus)$('menu-button').focus();
+}
+$('menu-button').setAttribute('aria-controls','sidebar');
+$('menu-button').addEventListener('click',()=>setMobileMenu(!$('sidebar').classList.contains('mobile-open')));
+$('menu-backdrop').addEventListener('click',()=>setMobileMenu(false,true));
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&$('sidebar').classList.contains('mobile-open'))setMobileMenu(false,true);
+});
+mobileLayout.addEventListener('change',()=>setMobileMenu(false));
+setMobileMenu(false);
 $('signout-button').addEventListener('click',async()=>{await client.auth.signOut();user=null;profile=null;setVisibility()});
 $('session-date').value=dateToday();
 client.auth.onAuthStateChange((event)=>{if(publicForms.publicMode)return;if(event==='PASSWORD_RECOVERY'){passwordSetupPending=true;showPasswordSetup();}else if(event==='SIGNED_OUT'){passwordSetupPending=false;setVisibility();}else if(event==='SIGNED_IN'){setTimeout(()=>loadState(),0);}});

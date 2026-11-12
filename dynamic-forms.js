@@ -23,9 +23,35 @@ const templates = {
  programme:['Programme assessment',['Assessment date','date'],['Progress rating','scale'],['Outcomes observed','paragraph']],
  attendance:['Attendance report',['Session date','date'],['Expected participants','number'],['Participants present','number']],
  activity:['Activity evaluation',['Activity','text'],['Activity date','date'],['Was the activity completed?','yesno'],['Outcome rating','rating'],['Observations','paragraph']],
- survey:['General survey',['Your feedback','paragraph'],['Overall rating','rating']]
+ survey:['General survey',['Your feedback','paragraph'],['Overall rating','rating']],
+ children:['Children’s Programme Evaluation']
 };
 function template(key) {
+ if(key==='children'){
+  const age=question('What is your age range?','dropdown');
+  age.options=['Under 10','10–12','13–15','16–17','18 or older','Prefer not to say'];
+  const programme=question('Which programme did you participate in?','radio',true);
+  programme.options=['YAGEP','BIG','PAL-TECH'];
+  return {
+   title:templates.children[0],
+   description:'For participants in YAGEP, BIG and PAL-TECH. Please leave names, contact details and other identifying information out of your answers.',
+   template:key,
+   sections:[
+    section('About your participation',[age,programme]),
+    section('Your experience',[
+     question('What were your expectations before joining the programme?','paragraph',true),
+     question('How would you describe your experience with the programme?','paragraph',true),
+     question('What did you enjoy most about the programme?','paragraph',true),
+     question('What new things did you learn or gain from the programme?','paragraph',true)
+    ]),
+    section('Challenges and next steps',[
+     question('What challenges or difficulties did you experience?','paragraph',true),
+     question('What would you like us to improve or do differently in the next cohort?','paragraph',true),
+     question('Would you like to take part in the next cohort? Why or why not?','paragraph',true)
+    ])
+   ]
+  };
+ }
  const [title,...fields]=templates[key];
  const questions=fields.map(([label,type])=>{
   const q=question(label,type,true);
@@ -92,6 +118,7 @@ export function mountDynamicForms(client, {esc}) {
  const admin=(action,args={})=>rpc('custom_admin',{p_action:action,...args});
  const option=(value,label,selected=false)=>'<option value="'+esc(value)+'"'+(selected?' selected':'')+'>'+esc(label)+'</option>';
  const cohortLabel=cohortId=>{
+  if(!cohortId)return 'No cohort assigned';
   const cohort=cohorts.find(c=>c.id===cohortId);
   return cohort?cohort.programme+' · '+cohort.name:'Unavailable cohort';
  };
@@ -99,7 +126,7 @@ export function mountDynamicForms(client, {esc}) {
  const message=value=>{host.querySelector('[data-builder-status]').textContent=value;};
  const input=(label,key,value,extra='')=>'<label>'+label+'<input data-key="'+key+'" value="'+esc(value??'')+'" '+extra+'></label>';
  const area=(label,key,value)=>'<label>'+label+'<textarea data-key="'+key+'" rows="2">'+esc(value??'')+'</textarea></label>';
- const button=(action,label,disabled=false)=>'<button type="button" class="secondary-button" data-builder="'+action+'"'+(disabled?' disabled':'')+'>'+label+'</button>';
+ const button=(action,label,disabled=false)=>'<button type="button" class="'+(['new','publish'].includes(action)?'primary-button':'secondary-button')+'" data-builder="'+action+'"'+(disabled?' disabled':'')+'>'+label+'</button>';
  const actions=(actions)=>'<div class="builder-actions">'+actions.join('')+'</div>';
  const dt=value=>{const d=new Date(value);return new Date(+d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
  const dateLabel=value=>new Date(value).toLocaleString();
@@ -122,9 +149,20 @@ export function mountDynamicForms(client, {esc}) {
   management.innerHTML='<h3>Custom forms</h3><div class="builder-grid"><label>Filter programme<select data-list-programme>'+option('','All programmes')+programmes.map(p=>option(p.id,p.name,p.id===programmeFilter)).join('')+'</select></label>'+
    '<label>Filter cohort<select data-list-cohort>'+option('','All cohorts')+cohorts.filter(c=>!programmeFilter||c.programme_id===programmeFilter).map(c=>option(c.id,cohortLabel(c.id),c.id===cohortFilter)).join('')+'</select></label></div>'+
    '<p>'+overview.forms+' forms · '+overview.published+' published · '+(overview.forms-overview.published)+' inactive · '+overview.responses+' responses</p>'+
-   '<div class="builder-table"><table><thead><tr><th>Form</th><th>Cohort</th><th>Status</th><th>Created</th><th>Updated</th><th>Responses</th><th>Actions</th></tr></thead><tbody>'+
-   formRows.map(f=>'<tr data-form="'+esc(f.id)+'"><td>'+esc(f.title)+'<br><small>'+esc(templates[f.template]?.[0]||'Custom form')+'</small></td><td>'+esc(cohortLabel(f.cohort_id))+'</td><td>'+esc(f.status)+(f.live_version?' · v'+f.live_version:'')+'</td><td>'+esc(dateLabel(f.created_at))+'</td><td>'+esc(dateLabel(f.updated_at))+'</td><td>'+f.responses+'</td><td>'+actions([button('edit','Edit'),button('preview-saved','Preview'),button('duplicate','Duplicate'),button('copy','Copy link',f.status!=='published'),button('responses','Responses'),button('analytics','Analytics'),button('draft','Unpublish',f.status!=='published'),button('closed','Close',f.status==='closed'||f.status==='archived'),button('archived','Archive',f.status==='archived'),button('rotate','Replace link')])+'</td></tr>').join('')+
-   '</tbody></table></div>'+actions([button('previous','Previous',!offset),button('next','Next',!hasMore)]);
+   (formRows.length?'<div class="builder-card-grid">'+formRows.map(form=>{
+    const live=form.status==='published';
+    const controls=actions([button('edit','Edit'),live?button('copy','Copy link'):button('preview-saved','Preview'),button('responses','Responses')]);
+    const extras=actions([
+     ...(live?[button('preview-saved','Preview'),button('draft','Unpublish')]:[]),
+     button('duplicate','Duplicate'),button('analytics','Analytics'),
+     button('closed','Close',form.status==='closed'||form.status==='archived'),
+     button('archived','Archive',form.status==='archived'),button('rotate','Replace link')
+    ]);
+    return '<article class="builder-form-card" data-form="'+esc(form.id)+'"><div class="builder-card-meta"><span class="builder-status-chip">'+esc(form.status)+(form.live_version?' · v'+form.live_version:'')+'</span><span>'+form.responses+' '+(form.responses===1?'response':'responses')+'</span></div>'+
+     '<h4>'+esc(form.title)+'</h4><p>'+esc(cohortLabel(form.cohort_id))+'</p><small>'+esc(templates[form.template]?.[0]||'Custom form')+' · Updated '+esc(dateLabel(form.updated_at))+'</small>'+
+     controls+'<details class="builder-more"><summary>More actions</summary>'+extras+'</details></article>';
+   }).join('')+'</div>':'<p class="builder-empty">No forms in this view. Choose a template to create one.</p>')+
+   (offset||hasMore?actions([button('previous','Previous',!offset),button('next','Next',!hasMore)]):'');
  }
  management.addEventListener('change',event=>{
   if(event.target.matches('[data-list-programme]')){
@@ -143,8 +181,9 @@ export function mountDynamicForms(client, {esc}) {
  }
  function drawEditor(){
   if(!definition){editor.innerHTML='';return;}
+  const openSettings=new Set([...editor.querySelectorAll('[data-question-settings][open]')].map(details=>details.dataset.questionSettings));
   const eligible=[];
-  const routing=current.id?'<p>Cohort · '+esc(cohortLabel(current.cohort_id))+'</p>':
+  const routing=current.id&&current.cohort_id&&!current.programme?'<p>Cohort · '+esc(cohortLabel(current.cohort_id))+'</p>':
    '<div class="builder-grid"><label>Programme<select data-programme>'+option('','Choose programme')+programmes.filter(p=>p.active).map(p=>option(p.id,p.name,p.id===current.programme)).join('')+'</select></label>'+
    '<label>Cohort<select data-cohort>'+option('','Choose cohort')+cohorts.filter(c=>c.programme_id===current.programme&&c.status==='active').map(c=>option(c.id,c.name,c.id===current.cohort_id)).join('')+'</select></label></div>';
   editor.innerHTML='<div class="builder-editor"><h3>'+ (current.id?'Edit form':'New form')+'</h3><p data-unsaved role="status">'+(dirty?'Unsaved changes':'')+'</p>'+routing+
@@ -159,19 +198,20 @@ export function mountDynamicForms(client, {esc}) {
       input('Question','title',q.title,'maxlength="200"')+
       '<div class="builder-grid"><label>Answer type<select data-key="type">'+Object.entries(fieldTypes).map(([k,v])=>option(k,v,k===q.type)).join('')+'</select></label>'+
       '<label class="builder-check"><input type="checkbox" data-key="required"'+(q.required?' checked':'')+'> Required</label></div>'+
+      (choiceTypes.includes(q.type)&&q.type!=='yesno'?area('Options (one per line)','options',q.options?.join('\n')):'')+
+      '<details class="builder-more" data-question-settings="'+esc(q.id)+'"'+(openSettings.has(q.id)||q.when?' open':'')+'><summary>Question settings</summary>'+
       area('Help text','description',q.description)+
       (['text','paragraph','email','phone','number','currency'].includes(q.type)?input('Placeholder','placeholder',q.placeholder,'maxlength="200"'):'')+
-      (choiceTypes.includes(q.type)&&q.type!=='yesno'?area('Options (one per line)','options',q.options?.join('\n')):'')+
       (q.type==='currency'?input('Currency code','currency',q.currency,'maxlength="3"'):'')+
       (['text','paragraph',...numericTypes,...dateTypes].includes(q.type)?'<div class="builder-grid">'+
        input(['text','paragraph'].includes(q.type)?'Minimum characters':'Minimum','min',q.min,'type="'+(q.type==='datetime'?'datetime-local':dateTypes.includes(q.type)?q.type:'number')+'" step="any"')+
-       input(['text','paragraph'].includes(q.type)?'Maximum characters':'Maximum','max',q.max,'type="'+(q.type==='datetime'?'datetime-local':dateTypes.includes(q.type)?q.type:'number')+'" step="any"')+'</div>':'')+rule+
+       input(['text','paragraph'].includes(q.type)?'Maximum characters':'Maximum','max',q.max,'type="'+(q.type==='datetime'?'datetime-local':dateTypes.includes(q.type)?q.type:'number')+'" step="any"')+'</div>':'')+rule+'</details>'+
       actions([button('q-up','Move up',!qi),button('q-down','Move down',qi===s.questions.length-1),button('q-copy','Duplicate'),button('q-delete','Delete question')])+'</fieldset>';
     }).join('');
     return '<fieldset class="builder-section" data-section="'+si+'"><legend>Section '+(si+1)+'</legend>'+
      input('Section heading','title',s.title,'maxlength="200"')+area('Section description','description',s.description)+rules+questions+
      actions([button('q-add','Add question'),button('s-up','Move section up',!si),button('s-down','Move section down',si===definition.sections.length-1),button('s-copy','Duplicate section'),button('s-delete','Delete section',definition.sections.length===1)])+'</fieldset>';
-   }).join('')+actions([button('s-add','Add section'),button('preview','Preview'),button('save','Save draft'),button('publish','Publish'),button('cancel','Done')])+'</div>';
+   }).join('')+'<div class="builder-editor-bar">'+actions([button('s-add','Add section'),button('preview','Preview'),button('save','Save draft'),button('publish','Publish'),button('cancel','Done')])+'</div></div>';
  }
  function itemFor(target){
   const s=target.closest('[data-section]');
@@ -347,9 +387,13 @@ export function mountDynamicForms(client, {esc}) {
   dialog.showModal();
  }
  async function save(action){
-  if(!current.cohort_id)throw new Error('Choose a programme and cohort.');
-  if(!current.id)current=await admin('create',{p_cohort:current.cohort_id,p_definition:definition});
-  if(action==='publish'||dirty)current=await admin(action,{p_id:current.id,p_revision:current.revision,p_definition:definition});
+  const cohortId=current.cohort_id||null;
+  if(action==='publish'&&!cohortId)throw new Error('Choose a programme and cohort before publishing.');
+  if(!current.id){
+   current=await admin('create',{p_cohort:cohortId,p_definition:definition});
+   dirty=false;
+  }
+  if(action==='publish'||dirty)current=await admin(action,{p_id:current.id,p_cohort:cohortId,p_revision:current.revision,p_definition:definition});
   dirty=false;
   drawEditor();
   if(action==='publish'){
@@ -442,6 +486,7 @@ export function mountDynamicForms(client, {esc}) {
    current=action==='new'?{}:null;
    definition=current?template(host.querySelector('[data-template]').value):null;
    dirty=Boolean(current);drawEditor();message('');
+   if(current)editor.querySelector('[data-key=title]')?.focus();
    return;
   }
   if(action==='preview'){preview(definition,cohortLabel(current.cohort_id));return;}
@@ -479,7 +524,7 @@ export function mountDynamicForms(client, {esc}) {
    if(current?.id===updated.id&&current.revision===form.revision)current=updated;
    message(action==='rotate'?'Link replaced. Use Copy link to share it.':'Form status updated.');
    await loadList();
-  }catch(error){message(error.message);}finally{target.disabled=false;host.inert=false;}
+  }catch(error){message(error.message);host.querySelector('[data-builder-status]').scrollIntoView({block:'nearest'});}finally{target.disabled=false;host.inert=false;}
  });
  return {
   publicMode:token!==null,
