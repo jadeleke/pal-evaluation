@@ -1,0 +1,21 @@
+name: Validate PAL form-builder changes
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/dynamic-cohort-forms-20261111]
+permissions:
+  contents: read
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: node --check app.js
+      - run: node --check public-forms.js
+      - run: node --check dynamic-forms.js
+      - run: node tests/frontend.mjs
+      - run: node tests/dynamic-forms.mjs
