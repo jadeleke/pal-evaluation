@@ -27,6 +27,10 @@
 .builder-editor label, .builder-response label { overflow-wrap: anywhere; }
 .legacy-form-panel .report-form { padding-inline: 0; }
 .record-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 6px; }
+.form-reporting-panel { margin-bottom: 20px; min-width: 0; }
+.form-reporting-panel label { display: block; min-width: 0; }
+.form-reporting-panel select, .form-reporting-panel input { display: block; width: 100%; max-width: 100%; }
+.form-reporting-panel [data-form-results] { margin-top: 16px; overflow-wrap: anywhere; }
 .menu-backdrop { display: none; }
 
 /* Shared small-screen layout */

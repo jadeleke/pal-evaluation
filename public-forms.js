@@ -60,8 +60,9 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  reset();
  async function allRows(table,columns){let rows=[];for(let offset=0;;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw error;rows.push(...data);if(data.length<500)return rows;}}
  async function load(){forms=await allRows('public_report_forms','id,cohort_id,title,description,status,opens_at,closes_at');return allRows('public_report_submissions','id,cohort_id,form_id,reporter_name,reporter_email,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators');}
- function render(cohorts,programmes){
+ function render(cohorts,programmes,page){
   dynamicForms.render(cohorts,programmes);
+  dynamicForms.renderReporting(page);
   cohortList=cohorts;const prior=editor.elements.programme.value;
   editor.elements.programme.innerHTML='<option value="">Select one programme</option>'+programmes.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');editor.elements.programme.value=prior;updateCohortOptions();
   $('public-forms-list').innerHTML=forms.map(f=>`<div class="cohort-card"><span class="badge-neutral">${esc(f.status)}</span><h3>${esc(f.title)}</h3><p>${esc(cohortList.find(c=>c.id===f.cohort_id)?.name)}</p><p>${esc(new Date(f.opens_at).toLocaleString())} – ${esc(new Date(f.closes_at).toLocaleString())}</p><div class="form-actions">${[['edit','Edit'],['duplicate','Duplicate'],['published','Publish'],['closed','Close'],['rotate','Replace link']].map(([a,label])=>`<button type="button" class="secondary-button" data-form-action="${a}" data-id="${esc(f.id)}">${label}</button>`).join('')}</div></div>`).join('')||'<p>No public forms yet.</p>';

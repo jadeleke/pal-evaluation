@@ -432,7 +432,8 @@ export function mountDynamicForms(client, {esc}) {
   const url=URL.createObjectURL(new Blob(['\uFEFF',csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download=name+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
- async function showInsights(form,versions,mode){
+ async function showInsights(form,versions,mode,insights,scroll=false){
+  insights.onchange=null;
   insights.innerHTML='<p role="status">Loading responses…</p>';
   const rows=[];
   for(let page=0;;page+=200){
@@ -492,7 +493,66 @@ export function mountDynamicForms(client, {esc}) {
   find('[data-export-rows]').onclick=()=>download('pal-form-responses',['Submitted at','Version',...columns.map(c=>'v'+c.version+' · '+c.q.title)],filtered.map(r=>[r.submitted_at,r.version,...columns.map(c=>c.version===r.version?r.answers[c.q.id]:'')]));
   find('[data-export-summary]').onclick=()=>download('pal-form-summary',['Version','Question','Metric','Value','Unit or percentage'],summary);
   draw();
-  insights.scrollIntoView({block:'start'});
+  if(scroll)insights.scrollIntoView({block:'start'});
+ }
+ const reportingPanels=new Map();
+ let lastReportingPage;
+ function renderReporting(page){
+  if(page===lastReportingPage)return;
+  lastReportingPage=page;
+  if(page!=='reports'&&page!=='analytics')return;
+  let panel=reportingPanels.get(page);
+  if(!panel){
+   panel=document.createElement('section');
+   panel.className='panel form-reporting-panel';
+   panel.dataset.admin='';
+   const title=page==='reports'?'Custom form responses':'Custom form analytics';
+   panel.innerHTML='<div class="panel-head"><h2>'+title+'</h2><button type="button" class="secondary-button" data-reload-forms>Refresh</button></div><label>Form<select></select></label><div data-form-results></div>';
+   const selector=panel.querySelector('select');
+   const results=panel.querySelector('[data-form-results]');
+   const reload=panel.querySelector('[data-reload-forms]');
+   async function openForm(){
+    const view=document.createElement('div');
+    results.replaceChildren(view);
+    if(!selector.value)return;
+    view.textContent='Loading form responses…';
+    try{
+     const {form,versions}=await admin('get',{p_id:selector.value});
+     await showInsights(form,versions,page==='reports'?'responses':'analytics',view);
+    }catch(error){view.textContent='Could not load responses. '+error.message;}
+   }
+   async function refresh(){
+    const selected=selector.value;
+    reload.disabled=true;
+    selector.disabled=true;
+    results.textContent='Loading forms…';
+    try{
+     const available=[];
+     for(let offset=0;;offset+=50){
+      const batch=await admin('list',{p_offset:offset});
+      available.push(...batch.filter(form=>form.live_version||form.responses>0));
+      if(batch.length<50)break;
+     }
+     selector.innerHTML=available.map(form=>option(form.id,
+      form.title.trim()+' · '+cohortLabel(form.cohort_id)+' · '+form.responses+' '+(form.responses===1?'response':'responses')
+     )).join('');
+     if(!available.length){
+      selector.innerHTML=option('','No published forms');
+      results.textContent='Publish a custom form to see it here.';
+      return;
+     }
+     selector.value=available.find(form=>form.id===selected)?.id||available.find(form=>form.responses>0)?.id||available[0].id;
+     await openForm();
+    }catch(error){results.textContent='Could not load forms. '+error.message;}
+    finally{reload.disabled=false;selector.disabled=!selector.value;}
+   }
+   selector.addEventListener('change',openForm);
+   reload.addEventListener('click',refresh);
+   get('page-'+page).querySelector('.heading-row').after(panel);
+   reportingPanels.set(page,panel);
+  }
+  const reload=panel.querySelector('[data-reload-forms]');
+  if(!reload.disabled)reload.click();
  }
  host.addEventListener('click',async event=>{
   const target=event.target.closest('[data-builder]');
@@ -529,7 +589,7 @@ export function mountDynamicForms(client, {esc}) {
     dirty=action==='duplicate';drawEditor();editor.scrollIntoView({block:'start'});message('');return;
    }
    if(action==='preview-saved'){preview(form.draft,cohortLabel(form.cohort_id));return;}
-   if(action==='responses'||action==='analytics'){await showInsights(form,versions,action);return;}
+   if(action==='responses'||action==='analytics'){await showInsights(form,versions,action,insights,true);return;}
    if(action==='copy'){
     showShareLink(form);
     return;
@@ -542,6 +602,7 @@ export function mountDynamicForms(client, {esc}) {
  });
  return {
   publicMode:token!==null,
+  renderReporting,
   render(newCohorts,newProgrammes){
    cohorts=newCohorts;programmes=newProgrammes;
    if(!listLoaded)loadList().catch(error=>message(error.message));
