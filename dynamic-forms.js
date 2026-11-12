@@ -151,7 +151,8 @@ export function mountDynamicForms(client, {esc}) {
    '<p>'+overview.forms+' forms · '+overview.published+' published · '+(overview.forms-overview.published)+' inactive · '+overview.responses+' responses</p>'+
    (formRows.length?'<div class="builder-card-grid">'+formRows.map(form=>{
     const live=form.status==='published';
-    const controls=actions([button('edit','Edit'),live?button('copy','Copy link'):button('preview-saved','Preview'),button('responses','Responses')]);
+    const controls=actions([button('edit',form.cohort_id?'Edit':'Choose cohort'),live?button('copy','Share link'):button('preview-saved','Preview'),button('responses','Responses')]);
+    const linkHint=live?'':'<p class="muted">'+(form.cohort_id?'Publish to get a public link.':'Choose a cohort and publish to get a public link.')+'</p>';
     const extras=actions([
      ...(live?[button('preview-saved','Preview'),button('draft','Unpublish')]:[]),
      button('duplicate','Duplicate'),button('analytics','Analytics'),
@@ -160,7 +161,7 @@ export function mountDynamicForms(client, {esc}) {
     ]);
     return '<article class="builder-form-card" data-form="'+esc(form.id)+'"><div class="builder-card-meta"><span class="builder-status-chip">'+esc(form.status)+(form.live_version?' · v'+form.live_version:'')+'</span><span>'+form.responses+' '+(form.responses===1?'response':'responses')+'</span></div>'+
      '<h4>'+esc(form.title)+'</h4><p>'+esc(cohortLabel(form.cohort_id))+'</p><small>'+esc(templates[form.template]?.[0]||'Custom form')+' · Updated '+esc(dateLabel(form.updated_at))+'</small>'+
-     controls+'<details class="builder-more"><summary>More actions</summary>'+extras+'</details></article>';
+     linkHint+controls+'<details class="builder-more"><summary>More actions</summary>'+extras+'</details></article>';
    }).join('')+'</div>':'<p class="builder-empty">No forms in this view. Choose a template to create one.</p>')+
    (offset||hasMore?actions([button('previous','Previous',!offset),button('next','Next',!hasMore)]):'');
  }
@@ -386,6 +387,25 @@ export function mountDynamicForms(client, {esc}) {
   renderRespondent(body,d,{preview:true,context});
   dialog.showModal();
  }
+ function showShareLink(form){
+  const url=link(form.token);
+  const dialog=document.createElement('dialog');
+  dialog.className='builder-preview';
+  dialog.innerHTML='<h2>Share form link</h2><label>Public form link<input readonly></label><p role="status"></p><div class="builder-actions"><button type="button" class="primary-button">Copy link</button><a class="secondary-button" target="_blank" rel="noopener noreferrer">Open form</a><button type="button" class="secondary-button">Done</button></div>';
+  const field=dialog.querySelector('input');
+  const [copy,done]=dialog.querySelectorAll('button');
+  field.value=url;
+  dialog.querySelector('a').href=url;
+  copy.addEventListener('click',async()=>{
+   const status=dialog.querySelector('[role=status]');
+   try{await navigator.clipboard.writeText(url);status.textContent='Link copied.';}
+   catch{field.focus();field.select();status.textContent='The link is selected. Copy it from the field above.';}
+  });
+  done.addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  document.body.append(dialog);
+  dialog.showModal();
+ }
  async function save(action){
   const cohortId=current.cohort_id||null;
   if(action==='publish'&&!cohortId)throw new Error('Choose a programme and cohort before publishing.');
@@ -398,9 +418,7 @@ export function mountDynamicForms(client, {esc}) {
   drawEditor();
   if(action==='publish'){
    message('Published version '+current.live_version+'.');
-   const share=document.createElement('input');
-   share.readOnly=true;share.value=link(current.token);share.setAttribute('aria-label','Public form link');
-   host.querySelector('[data-builder-status]').append(' ',share);
+   showShareLink(current);
   }else message('Draft saved.');
   await loadList();
  }
@@ -513,16 +531,12 @@ export function mountDynamicForms(client, {esc}) {
    if(action==='preview-saved'){preview(form.draft,cohortLabel(form.cohort_id));return;}
    if(action==='responses'||action==='analytics'){await showInsights(form,versions,action);return;}
    if(action==='copy'){
-    const url=link(form.token);
-    message('Public form link');
-    const share=document.createElement('input');share.readOnly=true;share.value=url;share.setAttribute('aria-label','Public form link');
-    host.querySelector('[data-builder-status]').append(' ',share);
-    try{await navigator.clipboard.writeText(url);message('Link copied.');}catch{share.select();}
+    showShareLink(form);
     return;
    }
    const updated=await admin(action,{p_id:form.id,p_revision:form.revision});
    if(current?.id===updated.id&&current.revision===form.revision)current=updated;
-   message(action==='rotate'?'Link replaced. Use Copy link to share it.':'Form status updated.');
+   message(action==='rotate'?'Link replaced. Use Share link to open it.':'Form status updated.');
    await loadList();
   }catch(error){message(error.message);host.querySelector('[data-builder-status]').scrollIntoView({block:'nearest'});}finally{target.disabled=false;host.inert=false;}
  });
