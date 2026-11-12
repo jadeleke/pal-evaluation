@@ -1,5 +1,6 @@
 // Cohort-specific fixed reporting templates. All authorization is enforced in PostgreSQL.
 import { readSessionReport } from './report-fields.js';
+import { mountDynamicForms } from './dynamic-forms.js';
 export const formCohorts=(cohorts,programmeId,existingCohortId=null)=>cohorts.filter(c=>c.programme_id===programmeId&&(c.status==='active'||c.id===existingCohortId));
 export function mountPublicForms(client, {esc, refresh, today}) {
  const $=id=>document.getElementById(id);
@@ -20,6 +21,7 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  <p id="public-admin-message" role="status"></p>
  <div id="public-link-panel" hidden><label>New share link — copy and keep it now<input id="public-share-link" readonly></label><button type="button" id="public-copy-link" class="secondary-button">Copy link</button><p>Only the link hash is stored. Rotate the link to generate a replacement. Rotation immediately disables the old link.</p></div></div>
  <div id="public-forms-list" class="cohort-grid"></div></section>`);
+ const dynamicForms=mountDynamicForms(client,{esc});
  const editor=$('public-form-editor');
  const localDate=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
  function reset(){editing=null;editor.reset();editor.elements.programme.disabled=false;editor.elements.cohort.disabled=false;updateCohortOptions();$('public-editor-title').textContent='Create a reporting form';$('public-create-publish').textContent='Create & publish form';$('public-save-draft').hidden=false;editor.elements.opens.value=localDate(new Date());editor.elements.closes.value=localDate(new Date(Date.now()+30*86400000));}
@@ -59,11 +61,13 @@ export function mountPublicForms(client, {esc, refresh, today}) {
  async function allRows(table,columns){let rows=[];for(let offset=0;;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw error;rows.push(...data);if(data.length<500)return rows;}}
  async function load(){forms=await allRows('public_report_forms','id,cohort_id,title,description,status,opens_at,closes_at');return allRows('public_report_submissions','id,cohort_id,form_id,reporter_name,reporter_email,session_date,outcome,enrolled_count,attended_count,topic,progress,summary,challenges,next_steps,co_facilitators');}
  function render(cohorts,programmes){
+  dynamicForms.render(cohorts,programmes);
   cohortList=cohorts;const prior=editor.elements.programme.value;
   editor.elements.programme.innerHTML='<option value="">Select one programme</option>'+programmes.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');editor.elements.programme.value=prior;updateCohortOptions();
   $('public-forms-list').innerHTML=forms.map(f=>`<div class="cohort-card"><span class="badge-neutral">${esc(f.status)}</span><h3>${esc(f.title)}</h3><p>${esc(cohortList.find(c=>c.id===f.cohort_id)?.name)}</p><p>${esc(new Date(f.opens_at).toLocaleString())} – ${esc(new Date(f.closes_at).toLocaleString())}</p><div class="form-actions">${[['edit','Edit'],['duplicate','Duplicate'],['published','Publish'],['closed','Close'],['rotate','Replace link']].map(([a,label])=>`<button type="button" class="secondary-button" data-form-action="${a}" data-id="${esc(f.id)}">${label}</button>`).join('')}</div></div>`).join('')||'<p>No public forms yet.</p>';
  }
  async function start(){
+  if(dynamicForms.publicMode)return dynamicForms.start();
   if(!publicMode)return;
   $('app').hidden=true;$('auth-page').hidden=true;$('password-page').hidden=true;
   document.body.insertAdjacentHTML('beforeend','<main id="public-report-page" class="public-report-page"><div class="eyebrow">VOLUNTEER REPORTING · PLAY & LEARN FOUNDATION</div><h1 id="public-title">Loading reporting form…</h1><p id="public-description"></p><p id="public-context"></p><p id="public-status" role="status" tabindex="-1"></p><section id="public-receipt" class="panel report-form" hidden aria-labelledby="public-receipt-title"><h2 id="public-receipt-title">Session report submitted</h2><div id="public-receipt-details"></div><button type="button" id="public-another-report" class="primary-button">Submit another session report</button></section><div id="public-report-host"></div></main>');
@@ -101,5 +105,5 @@ export function mountPublicForms(client, {esc, refresh, today}) {
    }catch(err){$('public-status').textContent='Could not submit: '+err.message;b.disabled=false;$('public-status').focus();}
   });
  }
- return {publicMode,start,load,render,allRows};
+ return {publicMode:publicMode||dynamicForms.publicMode,start,load,render,allRows};
 }

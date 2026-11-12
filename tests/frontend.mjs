@@ -3,6 +3,18 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {readSessionReport} from '../report-fields.js';
 import {formCohorts} from '../public-forms.js';
+import {visibleAnswers,summarizeAnswers} from '../dynamic-forms.js';
+const branching={sections:[
+ {questions:[{id:'finished'}]},
+ {when:{id:'finished',equals:'Yes'},questions:[{id:'score'}]},
+ {when:{id:'finished',equals:'No'},questions:[{id:'reason'}]}
+]};
+assert.deepEqual(visibleAnswers(branching,{finished:'Yes',score:0,reason:'stale',cohort_id:'other'}),{finished:'Yes',score:0});
+assert.deepEqual(visibleAnswers(branching,{finished:'No',score:4,reason:'Follow-up'}),{finished:'No',reason:'Follow-up'});
+const exampleRows=[{answers:{amount:0,choices:['A','B']}},{answers:{amount:20,choices:['A']}},{answers:{}}];
+const amounts=summarizeAnswers({id:'amount',type:'currency'},exampleRows);
+assert.deepEqual([amounts.count,amounts.total,amounts.average,amounts.min,amounts.max],[2,20,10,0,20]);
+assert.deepEqual([...summarizeAnswers({id:'choices',type:'checkbox'},exampleRows).bins],[['A',2],['B',1]]);
 const independentCohorts=[{id:'tech-jan',programme_id:'tech',status:'active'},{id:'girls-jan',programme_id:'girls',status:'active'},{id:'tech-future',programme_id:'tech',status:'active'},{id:'tech-old',programme_id:'tech',status:'completed'}];
 assert.deepEqual(formCohorts(independentCohorts,'tech').map(c=>c.id),['tech-jan','tech-future']);
 assert.deepEqual(formCohorts(independentCohorts,'girls').map(c=>c.id),['girls-jan']);
