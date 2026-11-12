@@ -11,9 +11,11 @@ const TYPES=[
 export const newQuestion=(type='text',label='New question')=>({
  id:uuid(),type,label,required:type!=='heading',help:'',placeholder:'',
  ...( ['select','radio','checkbox'].includes(type)?{options:['Option 1','Option 2']}:{} ),
- ...( ['rating','linear'].includes(type)?{min:1,max:5}:{} )
+ ...( ['rating','linear'].includes(type)?{min:1,max:5}:{} ),
+ ...( type==='currency'?{currencyCode:'GHS'}:{} )
 });
 export const blankSchema=()=>({sections:[{id:uuid(),title:'Section 1',description:'',questions:[newQuestion()]}]});
+export const currencyCodes=['GHS','USD','EUR','GBP'];
 const tmpl=(title,types)=>({title,schema:{sections:[{id:uuid(),title:'About this activity',description:'',questions:types.map(([type,label])=>newQuestion(type,label))}]}});
 export function formTemplate(id){
  switch(id){
@@ -127,9 +129,12 @@ export function mountDynamicForms(client,{esc,refresh}){
        '<label>Answer type<select data-field="'+prefix+'.type">'+typOptions+'</select></label>'+
        '<label>Help text<input data-field="'+prefix+'.help" value="'+esc(q.help||'')+'" maxlength="500"></label>'+
        '<label>Placeholder<input data-field="'+prefix+'.placeholder" value="'+esc(q.placeholder||'')+'" maxlength="180"></label>'+
-       '<label><input type="checkbox" data-field="'+prefix+'.required" '+(q.required?'checked':'')+'> Required</label>'+
+       '<label><input type="checkbox" data-field="'+prefix+'.required" '+(q.required?'checked':'')+' '+(q.type==='heading'?'disabled':'')+'> Required</label>'+
        (['select','radio','checkbox'].includes(q.type)?'<label class="dynamic-span">Answer options (one per line)<textarea data-field="'+prefix+'.options" rows="3">'+esc((q.options||[]).join('\n'))+'</textarea></label>':'')+
        (['rating','linear','number','currency'].includes(q.type)?'<label>Minimum<input type="number" data-field="'+prefix+'.min" value="'+esc(q.min??'')+'"></label><label>Maximum<input type="number" data-field="'+prefix+'.max" value="'+esc(q.max??'')+'"></label>':'')+
+       (['text','paragraph','email','phone'].includes(q.type)?'<label>Minimum characters<input type="number" min="0" max="4000" data-field="'+prefix+'.minLength" value="'+esc(q.minLength??'')+'"></label><label>Maximum characters<input type="number" min="0" max="4000" data-field="'+prefix+'.maxLength" value="'+esc(q.maxLength??'')+'"></label>':'')+
+       (q.type==='date'?'<label>Earliest date<input type="date" data-field="'+prefix+'.minDate" value="'+esc(q.minDate||'')+'"></label><label>Latest date<input type="date" data-field="'+prefix+'.maxDate" value="'+esc(q.maxDate||'')+'"></label>':'')+
+       (q.type==='currency'?'<label>Currency<select data-field="'+prefix+'.currencyCode">'+currencyCodes.map(code=>opt(code,code,q.currencyCode||'GHS')).join('')+'</select></label>':'')+
        conditionEditor(q.when,before,prefix)+'</div></div>';
       if(['select','radio','yesno'].includes(q.type))earlier.push(q);
       return body;
@@ -138,7 +143,7 @@ export function mountDynamicForms(client,{esc,refresh}){
      '<button data-action="add-question" data-section="'+si+'" type="button" class="secondary-button">＋ Add question</button></article>';
   }).join('');
   const selectedC=cohorts.find(c=>c.id===current.cohort_id);
-  host.innerHTML='<div class="dynamic-section-head"><div><h2>'+(current.id?'Edit form':'Create form')+'</h2><p class="muted">Saved forms stay linked to one cohort. Published submissions retain their original version.</p></div><button id="dynamic-cancel" type="button" class="secondary-button">Close editor</button></div>'+
+  host.innerHTML='<div class="dynamic-section-head"><div><h2>'+(current.id?'Edit form':'Create form')+'</h2><p class="muted">Saved forms stay linked to one cohort. Published submissions retain their original version. Do not collect identifying details about children.</p></div><button id="dynamic-cancel" type="button" class="secondary-button">Close editor</button></div>'+
    '<div class="dynamic-grid"><label>Programme<select id="dynamic-programme" '+(current.id?'disabled':'')+'>'+
     opt('','Choose programme',!selectedC?'':selectedC.programme_id)+programmes.map(p=>opt(esc(p.id),esc(p.name),selectedC?.programme_id)).join('')+'</select></label>'+
    '<label>Cohort *<select id="dynamic-cohort" '+(current.id?'disabled':'')+'>'+
@@ -185,6 +190,7 @@ export function mountDynamicForms(client,{esc,refresh}){
    dirty=true;if(path.endsWith('.type')){const parts=path.split('.'),q=current.draft_schema.sections[Number(parts[1])].questions[Number(parts[3])];
     Object.assign(q,{required:q.type!=='heading'});if(['select','radio','checkbox'].includes(q.type)&&!q.options)q.options=['Option 1','Option 2'];
     if(['rating','linear'].includes(q.type)){q.min??=1;q.max??=5;}
+    if(q.type==='currency')q.currencyCode??='GHS';
    }
    if(path.endsWith('.type')||path.includes('.when.questionId'))renderBuilder();
   }
@@ -212,7 +218,16 @@ export function mountDynamicForms(client,{esc,refresh}){
   else if(a==='up-section')move(ss,si,-1);
   else if(a==='down-section')move(ss,si,1);
   else if(a==='delete-section'&&window.confirm('Delete this section and its questions?'))ss.splice(si,1);
-  else if(a==='copy-section'){const copy=normalize(s);copy.id=uuid();copy.questions=copy.questions.map(q=>({...q,id:uuid()}));ss.splice(si+1,0,copy);}
+  else if(a==='copy-section'){
+   const copy=normalize(s),mapping=new Map(copy.questions.map(q=>[q.id,uuid()]));
+   copy.id=uuid();
+   copy.questions=copy.questions.map(q=>{
+     const replacement={...q,id:mapping.get(q.id)};
+     if(replacement.when&&mapping.has(replacement.when.questionId))replacement.when.questionId=mapping.get(replacement.when.questionId);
+     return replacement;
+   });
+   ss.splice(si+1,0,copy);
+  }
   else if(a==='up-question')move(s.questions,qi,-1);
   else if(a==='down-question')move(s.questions,qi,1);
   else if(a==='delete-question'&&window.confirm('Delete this question?'))s.questions.splice(qi,1);
@@ -343,7 +358,7 @@ export function mountDynamicForms(client,{esc,refresh}){
   if(!publicMode)return;
   $('app').hidden=true;$('auth-page').hidden=true;$('password-page').hidden=true;
   document.body.insertAdjacentHTML('beforeend','<main class="dynamic-public" id="dynamic-public"><div class="eyebrow">PLAY & LEARN FOUNDATION · PUBLIC FORM</div>'+
-   '<h1 id="dynamic-public-title">Loading form…</h1><p id="dynamic-public-description"></p><p id="dynamic-public-context"></p>'+
+   '<h1 id="dynamic-public-title">Loading form…</h1><p id="dynamic-public-description"></p><p id="dynamic-public-context"></p><p class="muted">Do not include information that could identify children.</p>'+
    '<p role="status" id="dynamic-public-status" tabindex="-1"></p><div id="dynamic-public-host"></div></main>');
   const {data,error}=await client.rpc('get_dynamic_form',{p_token:token});
   if(error||!data){$('dynamic-public-title').textContent='Form unavailable';$('dynamic-public-status').textContent='This link is invalid, closed, expired or unavailable. Contact the programme coordinator.';return;}
@@ -364,7 +379,12 @@ export function mountDynamicForms(client,{esc,refresh}){
       Array.from({length:q.max-q.min+1},(_,i)=>opt(i+q.min,i+q.min,val)).join('')+'</select>';
    const type=({text:'text',email:'email',phone:'tel',date:'date',time:'time',datetime:'datetime-local',number:'number',currency:'number'})[q.type]||'text';
    const numberAttrs=['number','currency'].includes(q.type)?'step="'+(q.type==='currency'?'0.01':'any')+'" ':'';
-   return '<input '+name+' type="'+type+'" value="'+esc(val)+'" placeholder="'+esc(q.placeholder||'')+'" '+numberAttrs+required+'>';
+   const limits=['number','currency'].includes(q.type)?
+    (q.min!==undefined?'min="'+esc(q.min)+'" ':'')+(q.max!==undefined?'max="'+esc(q.max)+'" ':''):
+    ['text','paragraph','email','phone'].includes(q.type)?
+    (q.minLength!==undefined?'minlength="'+esc(q.minLength)+'" ':'')+(q.maxLength!==undefined?'maxlength="'+esc(q.maxLength)+'" ':''):
+    q.type==='date'?(q.minDate?'min="'+esc(q.minDate)+'" ':'')+(q.maxDate?'max="'+esc(q.maxDate)+'" ':''):'';
+   return '<input '+name+' type="'+type+'" value="'+esc(val)+'" placeholder="'+esc(q.placeholder||'')+'" '+numberAttrs+limits+required+'>';
   };
   function renderPublic(){
    $('dynamic-public-host').innerHTML='<form id="dynamic-response-form">'+data.schema.sections.filter(s=>visibleBy(s.when,answers)).map(s=>
