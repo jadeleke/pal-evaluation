@@ -59,6 +59,16 @@
       <p class="muted">Plan cohort dates, assign a leader, and build the volunteer team.</p></div>
     <button type="button" class="primary-button" id="add-cohort-button">＋ Add cohort</button>
   </div>
+  <section class="panel cohort-add-panel" data-admin hidden>
+    <div class="panel-head"><h3>Programmes</h3><button type="button" class="secondary-button" id="add-programme-button">Add programme</button></div>
+    <form id="programme-form" class="form-grid" hidden>
+      <label>Programme name *<input name="name" maxlength="80" required /></label>
+      <label>Description<input name="description" maxlength="500" /></label>
+      <div class="span-2"><button type="submit" class="primary-button">Save programme</button></div>
+    </form>
+    <div id="programme-list"></div>
+  </section>
+  <p id="programme-cohort-alert" class="form-alert" role="status" hidden></p>
   <div class="cohort-grid" id="cohort-grid"></div>
   <div class="panel cohort-add-panel" id="cohort-add-panel" hidden>
     <div class="panel-head"><div><h3>Create a cohort</h3>

@@ -99,12 +99,21 @@ function renderReports(){const search=$('report-search').value.trim().toLowerCas
 }
 function personName(id){const p=people.find(x=>x.id===id);return p?.full_name||p?.email||'Unassigned';}
 function renderCohorts(){
+ const admin=profile?.role==='super_admin';
+ $('programme-list').innerHTML=admin?programmes.map(programme=>{
+  const count=cohorts.filter(cohort=>cohort.programme_id===programme.id).length;
+  return `<div class="cohort-info"><span><strong>${esc(programme.name)}</strong> · ${count} ${count===1?'cohort':'cohorts'}</span><button type="button" class="secondary-button" data-delete-programme="${esc(programme.id)}" aria-label="Delete programme ${esc(programme.name)}">Delete</button></div>`;
+ }).join(''):'';
  $('cohort-grid').innerHTML=cohorts.length?cohorts.map(c=>{
  const related=reports.filter(r=>r.cohort_id===c.id),assigned=memberships.filter(m=>m.cohort_id===c.id).map(m=>personName(m.user_id));
- return '<div class="cohort-card"><div class="cohort-top"><div class="programme-icon '+slug(c.programme)+'">'+emoji(c.programme)+'</div><span class="cohort-type">'+esc(c.status)+'</span></div><h3>'+esc(c.name)+'</h3><p>'+esc(c.programme)+'</p><div class="cohort-info"><span>Schedule</span><strong>'+fmt(c.start_date)+' – '+fmt(c.end_date)+'</strong></div><div class="cohort-info"><span>Leader</span><strong>'+esc(c.leader_id?personName(c.leader_id):'Not assigned')+'</strong></div><div class="cohort-info"><span>Team</span><strong>'+esc(profile.role==='super_admin'?(assigned.join(', ')||'Not assigned'):'Assigned cohort')+'</strong></div><div class="cohort-info"><span>Reports</span><strong>'+related.length+'</strong></div></div>'
+ const remove=admin?`<button type="button" class="secondary-button" data-delete-cohort="${esc(c.id)}" aria-label="Delete cohort ${esc(c.name)}">Delete cohort</button>`:'';
+ return '<div class="cohort-card"><div class="cohort-top"><div class="programme-icon '+slug(c.programme)+'">'+emoji(c.programme)+'</div><span class="cohort-type">'+esc(c.status)+'</span></div><h3>'+esc(c.name)+'</h3><p>'+esc(c.programme)+'</p><div class="cohort-info"><span>Schedule</span><strong>'+fmt(c.start_date)+' – '+fmt(c.end_date)+'</strong></div><div class="cohort-info"><span>Leader</span><strong>'+esc(c.leader_id?personName(c.leader_id):'Not assigned')+'</strong></div><div class="cohort-info"><span>Team</span><strong>'+esc(admin?(assigned.join(', ')||'Not assigned'):'Assigned cohort')+'</strong></div><div class="cohort-info"><span>Reports</span><strong>'+related.length+'</strong></div>'+remove+'</div>'
  }).join(''):'<div class="empty-wide">No cohorts available yet. Create your first cohort.</div>';
 }
 function renderSelectors(){
+ const reportFilter=$('report-filter'),previousProgramme=reportFilter.value;
+ reportFilter.innerHTML='<option value="">All programmes</option>'+programmes.map(programme=>`<option value="${esc(programme.name)}">${esc(programme.name)}</option>`).join('');
+ if(programmes.some(programme=>programme.name===previousProgramme))reportFilter.value=previousProgramme;
  const p=$('programme-select').value;
  const allowed=programmes.filter(x=>x.active);
  $('programme-select').innerHTML='<option value="">Select programme</option>'+allowed.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');
@@ -195,6 +204,57 @@ async function submitCohort(e){
   await loadState();go('cohorts');
  }catch(error){message('cohort-form-alert','Could not save cohort: '+error.message);}
  finally{button.disabled=false;}
+}
+async function submitProgramme(event){
+ event.preventDefault();
+ if(profile?.role!=='super_admin')return;
+ const form=event.currentTarget;
+ const fields=new FormData(form);
+ const name=String(fields.get('name')).trim();
+ const description=String(fields.get('description')).trim();
+ const alertId='programme-cohort-alert';
+ if(!name){message(alertId,'Enter a programme name.');return;}
+ const button=form.querySelector('[type="submit"]');
+ button.disabled=true;
+ try{
+  const {error}=await client.from('programmes').insert({name,description});
+  if(error)throw error;
+  form.reset();
+  form.hidden=true;
+  await loadState();
+  message(alertId,`Programme “${name}” created.`,true);
+ }catch(error){
+  message(alertId,error.code==='23505'?'A programme with that name already exists.':'Could not create programme. '+error.message);
+ }finally{button.disabled=false;}
+}
+
+async function deleteProgrammeOrCohort(event){
+ if(profile?.role!=='super_admin')return;
+ const button=event.target.closest('[data-delete-programme],[data-delete-cohort]');
+ if(!button)return;
+ const isProgramme=button.hasAttribute('data-delete-programme');
+ const kind=isProgramme?'programme':'cohort';
+ const id=button.dataset.deleteProgramme||button.dataset.deleteCohort;
+ const record=(isProgramme?programmes:cohorts).find(item=>item.id===id);
+ if(!record)return;
+ const alertId='programme-cohort-alert';
+ const blocked=isProgramme?'This programme still contains cohorts.':'This cohort has linked reports or forms.';
+ if(isProgramme?cohorts.some(item=>item.programme_id===id):reports.some(report=>report.cohort_id===id)){
+  message(alertId,blocked);
+  return;
+ }
+ const consequence=isProgramme?'':' Its team assignments will also be removed.';
+ if(!confirm(`Permanently delete ${kind} “${record.name}”?${consequence}`))return;
+ button.disabled=true;
+ try{
+  const {data,error}=await client.from(isProgramme?'programmes':'cohorts').delete().eq('id',id).select('id').maybeSingle();
+  if(error)throw error;
+  if(!data)throw new Error('The record is unavailable or you no longer have permission.');
+  await loadState();
+  message(alertId,`“${record.name}” deleted.`,true);
+ }catch(error){
+  message(alertId,error.code==='23503'?blocked:`Could not delete ${kind}. ${error.message}`);
+ }finally{button.disabled=false;}
 }
 function downloadCSV(){const fields=['id','programme','cohort','date','outcome','enrolled','attended','topic','progress','summary','challenges','nextSteps'],rows=[fields,...reports.map(r=>fields.map(k=>r[k]??''))],csv=rows.map(row=>row.map(v=>'"'+String(v).replace(/^[=+\-@\t\r]/,"'$&").replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='pal-evaluation-reports.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function invite(e){e.preventDefault();const f=new FormData(e.target);message('invite-alert','');
@@ -321,6 +381,13 @@ document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
 $('report-form').addEventListener('submit',submitReport);
 $('cohort-form').addEventListener('submit',submitCohort);
+$('programme-form').addEventListener('submit',submitProgramme);
+$('add-programme-button').addEventListener('click',()=>{
+ const form=$('programme-form');
+ form.hidden=!form.hidden;
+ if(!form.hidden)form.elements.name.focus();
+});
+$('page-cohorts').addEventListener('click',deleteProgrammeOrCohort);
 $('programme-select').addEventListener('change',updateCohortSelect);
 $('report-search').addEventListener('input',renderReports);
 $('report-filter').addEventListener('change',renderReports);
