@@ -239,11 +239,29 @@ export function mountDynamicForms(client,{esc,refresh}){
  });
  function renderPreview(){
   const target=$('dynamic-preview');if(!target)return;
-  target.innerHTML='<h3>Form preview</h3><p class="muted">Layout preview; conditions are evaluated when volunteers answer.</p>'+
+  const control=q=>{
+   const attrs='disabled aria-label="'+esc(q.label)+'"';
+   if(q.type==='heading')return '<p>'+esc(q.help||'')+'</p>';
+   if(q.type==='paragraph')return '<textarea '+attrs+' rows="3" placeholder="'+esc(q.placeholder||'Enter your answer')+'"></textarea>';
+   if(q.type==='select'||q.type==='rating'||q.type==='linear'){
+    const options=['rating','linear'].includes(q.type)
+      ?Array.from({length:Math.max(0,Number(q.max)-Number(q.min)+1)},(_,i)=>String(Number(q.min)+i))
+      :(q.options||[]);
+    return '<select '+attrs+'><option>Choose an option</option>'+options.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select>';
+   }
+   if(['radio','checkbox','yesno'].includes(q.type)){
+    const options=q.type==='yesno'?['Yes','No']:q.options||[];
+    return '<div class="dynamic-choices">'+options.map(x=>'<label><input '+attrs+' type="'+(q.type==='checkbox'?'checkbox':'radio')+'">'+esc(x)+'</label>').join('')+'</div>';
+   }
+   const type=({currency:'number',number:'number',date:'date',time:'time',datetime:'datetime-local',email:'email',phone:'tel'})[q.type]||'text';
+   return '<input '+attrs+' type="'+type+'" placeholder="'+esc(q.placeholder||'Enter your answer')+'">';
+  };
+  target.innerHTML='<h3>Volunteer form preview</h3><p class="muted">Preview only. Conditional fields are displayed with their visibility rules; no information is submitted.</p>'+
    current.draft_schema.sections.map(s=>'<div class="dynamic-preview-section"><h4>'+esc(s.title)+'</h4>'+
-     '<p>'+esc(s.description||'')+'</p>'+s.questions.map(q=>
-      '<div class="dynamic-preview-question"><strong>'+esc(q.label)+'</strong> '+(q.required?'*':'')+
-       '<p class="muted">'+esc(TYPES.find(t=>t[0]===q.type)?.[1]||'')+(q.when?' · Conditional':'')+'</p></div>').join('')+'</div>').join('');
+     '<p class="muted">'+esc(s.description||'')+'</p>'+(s.when?'<small>Visible when a previous answer is '+esc(s.when.value)+'</small>':'')+
+     (s.questions||[]).map(q=>'<div class="dynamic-preview-question"><strong>'+esc(q.label)+'</strong> '+(q.required?'*':'')+
+      (q.when?'<p class="muted">Visible when a previous answer is '+esc(q.when.value)+'</p>':'')+
+      '<p class="muted">'+esc(q.help||'')+'</p>'+control(q)+'</div>').join('')+'</div>').join('');
  }
  async function api(args){
   const {data,error}=await client.rpc('manage_dynamic_form',args);
